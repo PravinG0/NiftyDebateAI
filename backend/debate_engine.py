@@ -230,8 +230,17 @@ class DebateEngine:
         if entry_price <= 0:
             entry_price = 100.0
 
-        # Enforce 1-lot and Rs 5,000 budget guardrail
-        guardrail = validate_paper_trade_guardrails(sym, entry_price=entry_price, lots=1)
+        # Enforce 1-lot, Rs 5,000 budget, max Rs 700 SL, and max Rs 1,000 Target guardrail
+        from config import compute_clamped_sl_target
+        clamped_sl, clamped_tgt = compute_clamped_sl_target(sym, entry_price, decision.stop_loss, decision.target)
+
+        guardrail = validate_paper_trade_guardrails(
+            sym,
+            entry_price=entry_price,
+            lots=1,
+            stop_loss=clamped_sl,
+            target=clamped_tgt,
+        )
         quantity = guardrail["quantity"]
         outlay = guardrail["outlay"]
 
@@ -247,8 +256,8 @@ class DebateEngine:
             option_symbol=option_symbol,
             trade_type=decision.decision,
             entry_price=entry_price,
-            stop_loss=decision.stop_loss,
-            target=decision.target,
+            stop_loss=clamped_sl,
+            target=clamped_tgt,
             status="OPEN",
             opened_at=ist_now(),
             quantity=quantity,

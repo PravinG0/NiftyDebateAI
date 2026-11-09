@@ -78,7 +78,7 @@ async def test_manual_paper_trade_lifecycle():
         close_res = await client.patch(f"/api/trades/{trade_id}/close", json={"exit_price": 180.0})
         assert close_res.status_code == 200
         closed_trade = close_res.json()
-        assert closed_trade["status"] == "CLOSED"
+        assert closed_trade["status"] in ("CLOSED", "TARGET_HIT")
         assert closed_trade["pnl"] == round((180.0 - 140.0) * 25, 2)
 
 

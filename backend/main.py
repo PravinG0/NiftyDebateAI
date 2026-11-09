@@ -489,6 +489,8 @@ async def get_system_status(
         "virtual_capital": 5000.0,
         "capital": 5000.0,
         "budget_limit": 5000.0,
+        "max_stop_loss_inr": 700.0,
+        "max_target_inr": 1000.0,
         "lot_size": lot_size,
         "max_lots": 1,
         "scheduler_running": is_sched_running,
@@ -827,8 +829,21 @@ async def place_manual_trade(
             detail=f"Total trade outlay ₹{total_amount:.2f} exceeds Rs 5,000 budget limit.",
         )
 
-    sl = req.stop_loss if (req.stop_loss and req.stop_loss > 0) else round(max(1.0, entry - 35.0), 2)
-    tgt = req.target if (req.target and req.target > 0) else round(entry + 55.0, 2)
+    try:
+        from config import compute_clamped_sl_target, validate_paper_trade_guardrails
+        sl, tgt = compute_clamped_sl_target(idx_symbol, entry, req.stop_loss, req.target)
+        guardrail = validate_paper_trade_guardrails(
+            symbol=idx_symbol,
+            entry_price=entry,
+            lots=req.lots,
+            stop_loss=sl,
+            target=tgt,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
 
     expiry = get_nearest_expiry()
     symbol = f"{idx_symbol}{expiry}{req.strike}{req.option_type.upper()}"

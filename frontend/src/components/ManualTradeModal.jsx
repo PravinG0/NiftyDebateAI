@@ -11,45 +11,57 @@ export default function ManualTradeModal({
   spotPrice = 24500.0,
   onTradePlaced,
 }) {
-  const [strike, setStrike] = useState(initialStrike);
-  const [optionType, setOptionType] = useState(initialType);
-  const [price, setPrice] = useState(initialPrice);
-  const [stopLoss, setStopLoss] = useState(Math.round(Math.max(1, initialPrice * 0.75)));
-  const [target, setTarget] = useState(Math.round(initialPrice * 1.50));
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState(null);
-
   const lotSize = selectedIndex === 'BANKNIFTY' ? 15 : 25;
   const strikeStep = selectedIndex === 'BANKNIFTY' ? 100 : 50;
   const budgetLimit = 5000.0;
+  const maxStopLossINR = 700.0;
+  const maxTargetINR = 1000.0;
 
   // Strict 1-lot fixed guardrail
   const lots = 1;
   const quantity = lots * lotSize;
+
+  // Max points allowed for SL and Target based on lot size
+  const maxSlPoints = Math.floor((maxStopLossINR / quantity) * 100) / 100;
+  const maxTargetPoints = Math.floor((maxTargetINR / quantity) * 100) / 100;
+
+  const [strike, setStrike] = useState(initialStrike);
+  const [optionType, setOptionType] = useState(initialType);
+  const [price, setPrice] = useState(initialPrice);
+  const [stopLoss, setStopLoss] = useState(Math.max(1, Math.round((initialPrice - maxSlPoints) * 10) / 10));
+  const [target, setTarget] = useState(Math.round((initialPrice + maxTargetPoints) * 10) / 10);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
   const totalAmount = Math.round(price * quantity * 100) / 100;
-  const slAmount = Math.round(stopLoss * quantity * 100) / 100;
-  const targetAmount = Math.round(target * quantity * 100) / 100;
   const maxRisk = Math.max(0, Math.round((price - stopLoss) * quantity * 100) / 100);
   const expectedProfit = Math.max(0, Math.round((target - price) * quantity * 100) / 100);
 
   const exceedsBudget = totalAmount > budgetLimit;
+  const exceedsRisk = maxRisk > (maxStopLossINR + 0.1);
+  const exceedsTarget = expectedProfit > (maxTargetINR + 0.1);
 
   useEffect(() => {
+    const p = parseFloat(initialPrice) || 120.0;
+    const q = (selectedIndex === 'BANKNIFTY' ? 15 : 25);
+    const slPts = Math.floor((maxStopLossINR / q) * 100) / 100;
+    const tgtPts = Math.floor((maxTargetINR / q) * 100) / 100;
+
     setStrike(initialStrike);
     setOptionType(initialType);
-    setPrice(initialPrice);
-    setStopLoss(Math.round(Math.max(1, initialPrice * 0.75)));
-    setTarget(Math.round(initialPrice * 1.50));
+    setPrice(p);
+    setStopLoss(Math.max(1, Math.round((p - slPts) * 10) / 10));
+    setTarget(Math.round((p + tgtPts) * 10) / 10);
     setError(null);
-  }, [initialStrike, initialType, initialPrice, isOpen]);
+  }, [initialStrike, initialType, initialPrice, selectedIndex, isOpen]);
 
   if (!isOpen) return null;
 
   const handlePriceChange = (val) => {
     const p = parseFloat(val) || 0;
     setPrice(p);
-    setStopLoss(Math.round(Math.max(1, p * 0.75)));
-    setTarget(Math.round(p * 1.50));
+    setStopLoss(Math.max(1, Math.round((p - maxSlPoints) * 10) / 10));
+    setTarget(Math.round((p + maxTargetPoints) * 10) / 10);
   };
 
   const handleSubmit = async (e) => {
@@ -60,6 +72,14 @@ export default function ManualTradeModal({
     }
     if (exceedsBudget) {
       setError(`Trade outlay ₹${totalAmount.toFixed(2)} exceeds your ₹${budgetLimit} capital budget.`);
+      return;
+    }
+    if (exceedsRisk) {
+      setError(`Stop loss risk ₹${maxRisk.toFixed(2)} exceeds maximum ₹${maxStopLossINR} limit.`);
+      return;
+    }
+    if (exceedsTarget) {
+      setError(`Target profit ₹${expectedProfit.toFixed(2)} exceeds maximum ₹${maxTargetINR} limit.`);
       return;
     }
 
@@ -86,38 +106,38 @@ export default function ManualTradeModal({
   const isCE = optionType === 'CE';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col">
         {/* Header Bar */}
-        <div className={`px-6 py-4 flex items-center justify-between border-b border-slate-800 ${
+        <div className={`px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b border-slate-800 flex-shrink-0 ${
           isCE ? 'bg-emerald-950/60' : 'bg-rose-950/60'
         }`}>
           <div className="flex items-center gap-3">
             {isCE ? (
-              <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white">
-                <ArrowUpCircle size={22} />
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white flex-shrink-0">
+                <ArrowUpCircle size={20} />
               </div>
             ) : (
-              <div className="w-9 h-9 rounded-xl bg-rose-600 flex items-center justify-center text-white">
-                <ArrowDownCircle size={22} />
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-rose-600 flex items-center justify-center text-white flex-shrink-0">
+                <ArrowDownCircle size={20} />
               </div>
             )}
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white font-mono">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-white font-mono">
                   {selectedIndex === 'BANKNIFTY' ? 'BANK NIFTY' : 'NIFTY'} {strike} {optionType}
                 </h3>
-                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                <span className={`px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold ${
                   isCE ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
                 }`}>
                   {isCE ? 'CALL' : 'PUT'}
                 </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                  1 Lot Fixed
+                <span className="px-1.5 sm:px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                  1 Lot
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
-                Spot: ₹{Number(spotPrice).toLocaleString('en-IN')} • 1 Lot = {lotSize} Qty • Budget Guardrail ₹5,000
+              <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
+                Spot: ₹{Number(spotPrice).toLocaleString('en-IN')} • 1 Lot = {lotSize} Qty • Max SL ₹700 • Max Target ₹1,000
               </p>
             </div>
           </div>
@@ -129,8 +149,8 @@ export default function ManualTradeModal({
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        {/* Form Body - scrollable on mobile */}
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {error && (
             <div className="p-3 text-xs bg-rose-950 border border-rose-800 rounded-lg text-rose-200 flex items-center gap-2">
               <AlertTriangle size={15} className="text-rose-400 flex-shrink-0" />
@@ -140,11 +160,29 @@ export default function ManualTradeModal({
 
           {/* Budget Warning Banner if Exceeded */}
           {exceedsBudget && (
-            <div className="p-3 text-xs bg-amber-950 border border-amber-700 rounded-lg text-amber-200 flex items-center gap-2">
+            <div className="p-2.5 sm:p-3 text-xs bg-amber-950 border border-amber-700 rounded-lg text-amber-200 flex items-center gap-2">
               <AlertTriangle size={16} className="text-amber-400 flex-shrink-0" />
               <div>
                 <span className="font-bold">Budget Guardrail:</span> Outlay ₹{totalAmount.toFixed(2)} exceeds ₹{budgetLimit.toLocaleString('en-IN')}. Choose an OTM strike or lower entry.
               </div>
+            </div>
+          )}
+
+          {/* Risk Limits Banner if Exceeded */}
+          {(exceedsRisk || exceedsTarget) && (
+            <div className="p-2.5 sm:p-3 text-xs bg-rose-950 border border-rose-800 rounded-lg text-rose-200 space-y-1">
+              {exceedsRisk && (
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={14} className="text-rose-400 flex-shrink-0" />
+                  <span>Max Stop-Loss is ₹{maxStopLossINR}. Current risk: ₹{maxRisk.toFixed(2)}. Minimum allowed SL is ₹{Math.max(1, price - maxSlPoints).toFixed(2)}.</span>
+                </div>
+              )}
+              {exceedsTarget && (
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={14} className="text-amber-400 flex-shrink-0" />
+                  <span>Max Target profit is ₹{maxTargetINR}. Current profit: ₹{expectedProfit.toFixed(2)}. Maximum allowed Target is ₹{(price + maxTargetPoints).toFixed(2)}.</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -173,9 +211,9 @@ export default function ManualTradeModal({
           </div>
 
           {/* Strike and Lots */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-400 mb-1">
                 Strike Price (Step: {strikeStep})
               </label>
               <input
@@ -187,7 +225,7 @@ export default function ManualTradeModal({
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center justify-between">
+              <label className="block text-xs font-semibold text-slate-400 mb-1 flex items-center justify-between">
                 <span>Lot Size (Locked)</span>
                 <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
                   <Lock size={10} /> 1 Lot Max
@@ -202,12 +240,12 @@ export default function ManualTradeModal({
             </div>
           </div>
 
-          {/* Price, SL, Target */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Price, SL, Target - Stack on mobile, 3 columns on tablet/desktop */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Entry LTP (₹)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-slate-400">Entry LTP (₹)</label>
+              </div>
               <input
                 type="number"
                 step="0.05"
@@ -218,75 +256,83 @@ export default function ManualTradeModal({
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Stop Loss (₹)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-slate-400">Stop Loss (₹)</label>
+                <span className="text-[10px] text-rose-400 font-mono">Max -₹700</span>
+              </div>
               <input
                 type="number"
                 step="0.05"
                 min="0.5"
                 value={stopLoss}
                 onChange={(e) => setStopLoss(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-rose-300 font-mono text-sm focus:outline-none focus:border-rose-500"
+                className={`w-full px-3 py-2 bg-slate-950 border rounded-lg font-mono text-sm focus:outline-none ${
+                  exceedsRisk ? 'border-rose-500 text-rose-400' : 'border-slate-800 text-rose-300 focus:border-rose-500'
+                }`}
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Target (₹)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-slate-400">Target (₹)</label>
+                <span className="text-[10px] text-emerald-400 font-mono">Max +₹1k</span>
+              </div>
               <input
                 type="number"
                 step="0.05"
                 min="0.5"
                 value={target}
                 onChange={(e) => setTarget(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-emerald-300 font-mono text-sm focus:outline-none focus:border-emerald-500"
+                className={`w-full px-3 py-2 bg-slate-950 border rounded-lg font-mono text-sm focus:outline-none ${
+                  exceedsTarget ? 'border-amber-500 text-amber-400' : 'border-slate-800 text-emerald-300 focus:border-emerald-500'
+                }`}
               />
             </div>
           </div>
 
-          {/* Angel One Style Sizing & Budget Summary */}
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
-            <div className="flex items-center justify-between text-xs">
+          {/* Sizing, Guardrails & Budget Summary */}
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
               <span className="text-slate-400">Total Capital Outlay:</span>
-              <span className={`font-mono font-bold text-sm ${exceedsBudget ? 'text-amber-400' : 'text-white'}`}>
+              <span className={`font-mono font-bold ${exceedsBudget ? 'text-amber-400' : 'text-white'}`}>
                 ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
             </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Max Risk (SL):</span>
-              <span className="font-mono font-semibold text-rose-400">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Stop-Loss Risk (Max ₹700):</span>
+              <span className={`font-mono font-semibold ${exceedsRisk ? 'text-rose-500 font-bold' : 'text-rose-400'}`}>
                 -₹{maxRisk.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                {exceedsRisk && ' (Exceeds ₹700!)'}
               </span>
             </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Expected Profit (Target):</span>
-              <span className="font-mono font-semibold text-emerald-400">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Target Profit (Max ₹1,000):</span>
+              <span className={`font-mono font-semibold ${exceedsTarget ? 'text-amber-500 font-bold' : 'text-emerald-400'}`}>
                 +₹{expectedProfit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                {exceedsTarget && ' (Exceeds ₹1,000!)'}
               </span>
             </div>
             <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
               <span>Risk:Reward Ratio</span>
               <span className="font-mono font-bold text-blue-300">
-                1 : {maxRisk > 0 ? (expectedProfit / maxRisk).toFixed(2) : '2.00'}
+                1 : {maxRisk > 0 ? (expectedProfit / maxRisk).toFixed(2) : '1.43'}
               </span>
             </div>
           </div>
 
-          {/* Submit Button */}
-          <div className="flex gap-3 pt-2">
+          {/* Submit & Cancel Buttons */}
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold transition-colors"
+              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs sm:text-sm font-semibold transition-colors order-2 sm:order-1"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={submitting || exceedsBudget}
-              className={`flex-1 py-2.5 px-4 rounded-xl text-white text-sm font-bold shadow transition-colors flex items-center justify-center gap-2 ${
-                submitting || exceedsBudget
+              disabled={submitting || exceedsBudget || exceedsRisk || exceedsTarget}
+              className={`w-full sm:flex-1 py-2.5 px-4 rounded-xl text-white text-xs sm:text-sm font-bold shadow transition-colors flex items-center justify-center gap-2 order-1 sm:order-2 ${
+                submitting || exceedsBudget || exceedsRisk || exceedsTarget
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                   : isCE
                   ? 'bg-emerald-600 hover:bg-emerald-500'
@@ -300,6 +346,10 @@ export default function ManualTradeModal({
                 </>
               ) : exceedsBudget ? (
                 <span>Exceeds ₹5k Budget</span>
+              ) : exceedsRisk ? (
+                <span>SL Risk Exceeds ₹700</span>
+              ) : exceedsTarget ? (
+                <span>Target Exceeds ₹1,000</span>
               ) : (
                 <>
                   <Check size={16} />

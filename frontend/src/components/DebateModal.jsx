@@ -59,7 +59,7 @@ export default function DebateModal({ debate, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 animate-fade-in"
       onClick={onClose}
     >
       {/* Backdrop */}
@@ -67,29 +67,29 @@ export default function DebateModal({ debate, onClose }) {
 
       {/* Modal */}
       <div
-        className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/40 animate-slide-up"
+        className="relative w-full max-w-4xl max-h-[94vh] overflow-y-auto rounded-2xl bg-slate-900 border border-slate-700/60 shadow-2xl shadow-black/40 animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            <Scale size={20} className="text-amber-400" />
+        <div className="sticky top-0 z-10 flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <Scale size={20} className="text-amber-400 flex-shrink-0" />
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-white">Debate Details</h2>
-                <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-mono">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-white">Debate Details</h2>
+                <span className="text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-mono">
                   {indexSymbol === 'BANKNIFTY' ? 'BANK NIFTY' : 'NIFTY 50'} (Lot: {lotSize})
                 </span>
               </div>
-              <div className="flex items-center gap-3 mt-0.5">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-0.5">
                 {timestamp && (
-                  <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                  <span className="text-[11px] sm:text-xs text-slate-400 font-mono flex items-center gap-1">
                     <Clock size={12} className="text-blue-400" />
                     {formatIST(timestamp)}
                   </span>
                 )}
                 {spotPrice && (
-                  <span className="text-xs font-mono text-blue-400">
+                  <span className="text-[11px] sm:text-xs font-mono text-blue-400">
                     Spot: ₹{Number(spotPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 )}
@@ -98,13 +98,13 @@ export default function DebateModal({ debate, onClose }) {
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Verdict Banner */}
           <div className={`flex items-center justify-center gap-3 py-4 rounded-xl border ${
             isCE

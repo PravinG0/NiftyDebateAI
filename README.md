@@ -18,13 +18,13 @@ NiftyDebateAI employs a adversarial AI framework where two specialized agents (*
 - **Strict Capital & Safety Guardrails**:
   - **1-Lot Enforcement**: Strictly caps all trades to exactly 1 lot (25 for Nifty 50, 15 for Bank Nifty).
   - **₹5,000 Capital Limit**: Hard-coded safety check rejecting any option position exceeding ₹5,000 premium.
-  - **Strict Stop-Loss & Target**: Mandatory 1:2 or higher risk-reward execution plan.
-- **Canonical IST Standard**:
-  - All market timings, scheduler cron jobs, debate timestamps, and candles operate strictly in Indian Standard Time (`Asia/Kolkata`, UTC+05:30).
-  - Live IST digital clock and next-debate countdown timer.
-- **Full-Stack Dashboard**:
+  - **₹700 Maximum Stop-Loss**: Hard-coded safety cap restricting risk to $\le$ ₹700 per trade (28 pts on Nifty, 46.66 pts on Bank Nifty).
+  - **₹1,000 Maximum Target**: Hard-coded target limit restricting profit to $\le$ ₹1,000 per trade (40 pts on Nifty, 66.66 pts on Bank Nifty).
+- **Mobile-Responsive Full-Stack Dashboard**:
+  - Fully responsive layout optimized for mobile smartphones, tablets, and desktop displays.
+  - Dedicated Mobile Strike Card view for the Option Chain with CE/PE filters and 1-tap trade triggers.
+  - Responsive TradingView Lightweight Chart with auto-scaling `ResizeObserver`.
   - Interactive multi-index switcher (Nifty 50 vs. Bank Nifty).
-  - Live TradingView-style candlestick chart.
   - Real-time option chain with strike depths and Greeks/OI.
   - Live streaming multi-round debate view with transcripts.
   - Position summary, P&L monitor, and manual order entry modal.

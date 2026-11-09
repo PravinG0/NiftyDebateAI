@@ -44,16 +44,16 @@ export default function DebateArena({ debate, loading, onSelectTrade, selectedIn
   return (
     <div className="space-y-3">
       {/* Debate Header */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-1">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <h2 className="text-xs sm:text-sm font-semibold text-slate-400 uppercase tracking-wider">
             AI Debate Arena
           </h2>
-          <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-mono">
+          <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-mono">
             {indexSymbol === 'BANKNIFTY' ? 'BANK NIFTY' : 'NIFTY 50'} (Lot: {lotSize})
           </span>
           {timestamp && (
-            <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
+            <span className="text-[11px] sm:text-xs text-slate-400 font-mono flex items-center gap-1">
               <Clock size={12} className="text-blue-400" />
               {formatIST(timestamp)}
             </span>

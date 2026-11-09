@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { createChart, CandlestickSeries, ColorType, CrosshairMode } from 'lightweight-charts';
 import { getMarketCandles } from '../api';
-import { TrendingUp, Maximize2, Minimize2, ExternalLink, RefreshCw, BarChart2 } from 'lucide-react';
+import { TrendingUp, Maximize2, Minimize2, ExternalLink, RefreshCw } from 'lucide-react';
 
 const PRESET_SYMBOLS = [
   { label: 'NIFTY 50', symbol: 'NIFTY', tvSymbol: 'NSE:NIFTY' },
@@ -44,7 +44,6 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
       const res = await getMarketCandles(selectedPreset.symbol, selectedTf.interval, selectedTf.range);
       const candles = res.data?.candles || [];
       if (candles.length > 0 && seriesRef.current) {
-        // Ensure strictly sorted ascending timestamps
         const sorted = [...candles].sort((a, b) => a.time - b.time);
         seriesRef.current.setData(sorted);
         chartRef.current?.timeScale().fitContent();
@@ -71,7 +70,7 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
       layout: {
         background: { type: ColorType.Solid, color: '#090d16' },
         textColor: '#94a3b8',
-        fontSize: 12,
+        fontSize: 11,
       },
       grid: {
         vertLines: { color: 'rgba(30, 41, 59, 0.45)' },
@@ -138,21 +137,18 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
       setHoverBar(null);
     });
 
-    // Handle container resize
-    const handleResize = () => {
-      if (container && chart) {
-        chart.applyOptions({
-          width: container.clientWidth,
-          height: container.clientHeight,
-        });
+    // ResizeObserver for reliable mobile layout and orientation change resizing
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!entries || entries.length === 0) return;
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) {
+        chart.applyOptions({ width, height });
       }
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
+    });
+    resizeObserver.observe(container);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -166,7 +162,7 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
     return () => clearInterval(interval);
   }, [loadCandleData]);
 
-  // Adjust chart size on expand
+  // Adjust chart size on expand toggle
   useEffect(() => {
     const container = chartContainerRef.current;
     if (container && chartRef.current) {
@@ -184,43 +180,61 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
   return (
     <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl overflow-hidden shadow-2xl transition-all duration-300">
       {/* Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-slate-800/80 bg-slate-900/40">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 px-3 sm:px-5 py-2.5 sm:py-3 border-b border-slate-800/80 bg-slate-900/40">
         {/* Title & Live Status */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-            <TrendingUp size={18} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-slate-200 tracking-wide">
-                Live {selectedPreset.label} Candlestick Chart
-              </h2>
-              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                TradingView Engine
-              </span>
+        <div className="flex items-center justify-between sm:justify-start gap-2.5">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 flex-shrink-0">
+              <TrendingUp size={16} />
             </div>
-            {/* Real-time OHLC legend */}
-            {activeBar && (
-              <div className="flex items-center gap-2.5 text-xs font-mono mt-0.5 text-slate-400">
-                <span>O: <span className="text-slate-200">{activeBar.open?.toLocaleString()}</span></span>
-                <span>H: <span className="text-slate-200">{activeBar.high?.toLocaleString()}</span></span>
-                <span>L: <span className="text-slate-200">{activeBar.low?.toLocaleString()}</span></span>
-                <span>C: <span className={activeBar.close >= activeBar.open ? 'text-emerald-400' : 'text-rose-400'}>{activeBar.close?.toLocaleString()}</span></span>
-                {activeBar.changePct !== undefined && (
-                  <span className={activeBar.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                    {activeBar.change >= 0 ? '+' : ''}{activeBar.changePct?.toFixed(2)}%
-                  </span>
-                )}
+            <div>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h2 className="text-xs sm:text-sm font-semibold text-slate-200 tracking-wide">
+                  {selectedPreset.label} Chart
+                </h2>
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live
+                </span>
               </div>
-            )}
+              {/* Real-time OHLC legend */}
+              {activeBar && (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] sm:text-xs font-mono mt-0.5 text-slate-400">
+                  <span>O: <span className="text-slate-200">{activeBar.open?.toLocaleString()}</span></span>
+                  <span>H: <span className="text-slate-200">{activeBar.high?.toLocaleString()}</span></span>
+                  <span>L: <span className="text-slate-200">{activeBar.low?.toLocaleString()}</span></span>
+                  <span>C: <span className={activeBar.close >= activeBar.open ? 'text-emerald-400' : 'text-rose-400'}>{activeBar.close?.toLocaleString()}</span></span>
+                  {activeBar.changePct !== undefined && (
+                    <span className={activeBar.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                      {activeBar.change >= 0 ? '+' : ''}{activeBar.changePct?.toFixed(2)}%
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Mobile Right Action shortcuts */}
+          <div className="flex sm:hidden items-center gap-1">
+            <button
+              onClick={loadCandleData}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin text-blue-400' : ''} />
+            </button>
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+            >
+              {isExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
           </div>
         </div>
 
-        {/* Center Controls: Symbol Presets & Timeframes */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Center & Right Controls: Symbol Presets, Timeframes & Desktop Actions */}
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 overflow-x-auto max-w-full pb-1 sm:pb-0">
           {/* Symbol Presets */}
-          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-1 bg-slate-950/60 p-0.5 sm:p-1 rounded-xl border border-slate-800">
             {PRESET_SYMBOLS.map((item) => {
               const isActive = selectedPreset.symbol === item.symbol;
               return (
@@ -232,7 +246,7 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
                       onSelectIndex(item.symbol);
                     }
                   }}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                  className={`px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-medium whitespace-nowrap transition-all ${
                     isActive
                       ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
@@ -245,14 +259,14 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
           </div>
 
           {/* Timeframe Presets */}
-          <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
+          <div className="flex items-center gap-1 bg-slate-950/60 p-0.5 sm:p-1 rounded-xl border border-slate-800">
             {TIMEFRAMES.map((tf) => {
               const isActive = selectedTf.interval === tf.interval;
               return (
                 <button
                   key={tf.interval}
                   onClick={() => setSelectedTf(tf)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-all ${
+                  className={`px-2 sm:px-2.5 py-1 rounded-lg text-[10px] sm:text-xs font-mono transition-all ${
                     isActive
                       ? 'bg-slate-700 text-white font-semibold'
                       : 'text-slate-400 hover:text-slate-200'
@@ -263,55 +277,52 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
               );
             })}
           </div>
-        </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          {/* Refresh Button */}
-          <button
-            onClick={loadCandleData}
-            title="Refresh candles"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
-          >
-            <RefreshCw size={15} className={loading ? 'animate-spin text-blue-400' : ''} />
-          </button>
+          {/* Desktop Actions */}
+          <div className="hidden sm:flex items-center gap-1.5">
+            <button
+              onClick={loadCandleData}
+              title="Refresh candles"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
+            >
+              <RefreshCw size={15} className={loading ? 'animate-spin text-blue-400' : ''} />
+            </button>
 
-          {/* Direct TradingView Link */}
-          <a
-            href={`https://www.tradingview.com/chart/?symbol=${selectedPreset.tvSymbol}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 text-blue-400 hover:text-blue-300 border border-slate-700 transition-colors"
-            title="Open full chart on TradingView.com"
-          >
-            <span>TradingView.com</span>
-            <ExternalLink size={13} />
-          </a>
+            <a
+              href={`https://www.tradingview.com/chart/?symbol=${selectedPreset.tvSymbol}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 text-blue-400 hover:text-blue-300 border border-slate-700 transition-colors"
+              title="Open full chart on TradingView.com"
+            >
+              <span>TV</span>
+              <ExternalLink size={12} />
+            </a>
 
-          {/* Expand / Minimize */}
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            title={isExpanded ? 'Normal height' : 'Expand chart'}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
-          >
-            {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              title={isExpanded ? 'Normal height' : 'Expand chart'}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
+            >
+              {isExpanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Chart Canvas Area */}
       <div
         className={`w-full transition-all duration-300 relative bg-[#090d16] ${
-          isExpanded ? 'h-[650px]' : 'h-[460px]'
+          isExpanded ? 'h-[500px] sm:h-[650px]' : 'h-[320px] sm:h-[460px]'
         }`}
       >
         <div ref={chartContainerRef} className="h-full w-full" />
 
         {/* Loading Overlay */}
         {loading && (
-          <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-400 flex items-center gap-2 pointer-events-none">
-            <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <span>Fetching live candles...</span>
+          <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-700 text-[11px] text-slate-400 flex items-center gap-1.5 pointer-events-none">
+            <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <span>Updating...</span>
           </div>
         )}
       </div>

@@ -72,10 +72,17 @@ settings = Settings()
 # ── Capital Investment Budget & Position Sizing Guardrails (R4) ───────────────
 BUDGET_LIMIT: float = 5000.0
 MAX_LOTS: int = 1
+MAX_STOP_LOSS_INR: float = 700.0   # Maximum allowable stop-loss loss in Rupees (INR)
+MAX_TARGET_INR: float = 1000.0     # Maximum allowable target gain in Rupees (INR)
 
 
 class BudgetExceededError(ValueError):
     """Raised when an order outlay exceeds the capital investment budget."""
+    pass
+
+
+class RiskLimitExceededError(ValueError):
+    """Raised when stop-loss or target exceeds configured INR limits."""
     pass
 
 
@@ -106,16 +113,58 @@ def get_index_config(symbol: str = "NIFTY") -> dict[str, Any]:
     return INDEX_CONFIG.get(sym, INDEX_CONFIG["NIFTY"])
 
 
+def compute_clamped_sl_target(
+    symbol: str,
+    entry_price: float,
+    stop_loss: Optional[float] = None,
+    target: Optional[float] = None,
+    max_sl_inr: float = MAX_STOP_LOSS_INR,
+    max_target_inr: float = MAX_TARGET_INR,
+) -> tuple[float, float]:
+    """Computes and clamps stop-loss and target according to max INR risk and reward guardrails.
+
+    - Stop-Loss: Maximum loss is capped at Rs 700.
+      For Nifty (25 qty): max SL distance is 28.00 pts (Entry - 28.00).
+      For Bank Nifty (15 qty): max SL distance is 46.67 pts (Entry - 46.67).
+    - Target: Maximum profit is capped at Rs 1,000.
+      For Nifty (25 qty): max Target distance is 40.00 pts (Entry + 40.00).
+      For Bank Nifty (15 qty): max Target distance is 66.67 pts (Entry + 66.67).
+    """
+    cfg = get_index_config(symbol)
+    lot_size = cfg["lot_size"]
+    import math
+    max_sl_pts = math.floor((max_sl_inr / lot_size) * 100) / 100
+    max_tgt_pts = math.floor((max_target_inr / lot_size) * 100) / 100
+
+    min_allowed_sl = max(1.0, round(entry_price - max_sl_pts, 2))
+    if stop_loss is None or stop_loss <= 0 or stop_loss < min_allowed_sl or stop_loss >= entry_price:
+        final_sl = min_allowed_sl
+    else:
+        final_sl = round(stop_loss, 2)
+
+    max_allowed_tgt = round(entry_price + max_tgt_pts, 2)
+    if target is None or target <= entry_price or target > max_allowed_tgt:
+        final_tgt = max_allowed_tgt
+    else:
+        final_tgt = round(target, 2)
+
+    return final_sl, final_tgt
+
+
 def validate_paper_trade_guardrails(
     symbol: str,
     entry_price: float,
     lots: int = 1,
     budget_limit: float = BUDGET_LIMIT,
+    stop_loss: Optional[float] = None,
+    target: Optional[float] = None,
+    max_sl_inr: float = MAX_STOP_LOSS_INR,
+    max_target_inr: float = MAX_TARGET_INR,
 ) -> dict[str, Any]:
-    """Validates 1-lot order enforcement and Rs 5,000 budget guardrail.
+    """Validates 1-lot order enforcement, Rs 5,000 budget, max Rs 700 SL, and max Rs 1,000 Target guardrail.
 
     Raises:
-        ValueError / BudgetExceededError if guardrail conditions fail.
+        ValueError / BudgetExceededError / RiskLimitExceededError if guardrail conditions fail.
     """
     symbol_up = (symbol or "NIFTY").upper()
     if symbol_up not in INDEX_CONFIG:
@@ -143,6 +192,28 @@ def validate_paper_trade_guardrails(
             f"Max allowable premium for {symbol_up} is Rs {max_allowed_premium:.2f}."
         )
 
+    # Validate Stop Loss limit (Max Rs 700 loss)
+    actual_sl = stop_loss
+    if stop_loss is not None and stop_loss > 0:
+        if stop_loss >= entry_price:
+            raise ValueError(f"Stop-loss price (Rs {stop_loss:.2f}) must be strictly below entry price (Rs {entry_price:.2f}).")
+        loss_inr = round((entry_price - stop_loss) * quantity, 2)
+        if loss_inr > (max_sl_inr + 0.10):
+            raise RiskLimitExceededError(
+                f"Stop loss risk Rs {loss_inr:.2f} exceeds maximum allowed limit of Rs {max_sl_inr:.2f}."
+            )
+
+    # Validate Target limit (Max Rs 1,000 profit)
+    actual_tgt = target
+    if target is not None and target > 0:
+        if target <= entry_price:
+            raise ValueError(f"Target price (Rs {target:.2f}) must be strictly above entry price (Rs {entry_price:.2f}).")
+        profit_inr = round((target - entry_price) * quantity, 2)
+        if profit_inr > (max_target_inr + 0.10):
+            raise RiskLimitExceededError(
+                f"Target profit Rs {profit_inr:.2f} exceeds maximum allowed limit of Rs {max_target_inr:.2f}."
+            )
+
     return {
         "status": "APPROVED",
         "symbol": symbol_up,
@@ -152,5 +223,9 @@ def validate_paper_trade_guardrails(
         "outlay": outlay,
         "max_allowed_premium": max_allowed_premium,
         "budget_limit": budget_limit,
+        "stop_loss": actual_sl,
+        "target": actual_tgt,
+        "max_sl_inr": max_sl_inr,
+        "max_target_inr": max_target_inr,
     }
 

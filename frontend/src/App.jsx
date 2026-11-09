@@ -180,23 +180,30 @@ export default function App() {
     const step = cfg.strikeStep || (isBank ? 100 : 50);
     const defaultStrike = Math.round(spot / step) * step;
 
+    const p = contract?.price || 120.0;
+    const lotSize = isBank ? 15 : 25;
+    const maxSlPts = Math.floor((700.0 / lotSize) * 100) / 100;
+    const maxTgtPts = Math.floor((1000.0 / lotSize) * 100) / 100;
+    const defSl = Math.max(1, Math.round((p - maxSlPts) * 10) / 10);
+    const defTgt = Math.round((p + maxTgtPts) * 10) / 10;
+
     if (contract) {
       setTradeModalContract({
         symbol: sym,
         strike: contract.strike || defaultStrike,
         optionType: contract.optionType || 'CE',
-        price: contract.price || 120.0,
-        stopLoss: contract.stopLoss || Math.round((contract.price || 120.0) * 0.75),
-        target: contract.target || Math.round((contract.price || 120.0) * 1.50),
+        price: p,
+        stopLoss: contract.stopLoss || defSl,
+        target: contract.target || defTgt,
       });
     } else {
       setTradeModalContract({
         symbol: sym,
         strike: defaultStrike,
         optionType: 'CE',
-        price: 120.0,
-        stopLoss: 90.0,
-        target: 160.0,
+        price: p,
+        stopLoss: defSl,
+        target: defTgt,
       });
     }
     setManualTradeOpen(true);
@@ -226,7 +233,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="relative z-10 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-6">
+      <div className="relative z-10 max-w-[1600px] mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-5 space-y-4 sm:space-y-6">
         {/* Error Banner */}
         {error && (
           <div className="bg-rose-950 border border-rose-800 rounded-xl px-4 py-3 text-rose-200 text-sm flex items-center justify-between shadow-md">

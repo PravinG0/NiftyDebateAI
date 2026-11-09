@@ -45,10 +45,16 @@ You are presented with:
 3. **Confidence threshold**: Only consider a side if confidence >= 8.
 4. **Multi-timeframe alignment**: The higher_tf_trend must agree with the
    proposed direction.
-5. **Risk management** (ATR-based):
-   - Stop-Loss = Entry - 1.2 × ATR_equivalent (for option premium proxy)
-   - Target    = Entry + 2.0 × ATR_equivalent
-   - ATR_equivalent for option premium ≈ ATR × 0.5 (delta approximation for ATM)
+5. **Risk management & Strict Capital Guardrails (MANDATORY)**:
+   - Maximum Stop-Loss risk: MUST NOT EXCEED ₹700 (INR) total loss per 1-lot trade.
+     * For Nifty 50 (lot 25): (Entry - Stop-Loss) <= 28.00 points.
+     * For Bank Nifty (lot 15): (Entry - Stop-Loss) <= 46.67 points.
+   - Maximum Target reward: MUST NOT EXCEED ₹1,000 (INR) total profit per 1-lot trade.
+     * For Nifty 50 (lot 25): (Target - Entry) <= 40.00 points.
+     * For Bank Nifty (lot 15): (Target - Entry) <= 66.67 points.
+   - Stop-Loss = Entry - min(1.2 × ATR_equivalent, Max_SL_Points).
+   - Target    = Entry + min(2.0 × ATR_equivalent, Max_Target_Points).
+   - ATR_equivalent for option premium ≈ ATR × 0.5 (delta approximation for ATM).
    - Compute risk:reward ratio = (target - entry) / (entry - stop_loss).
      Format as "1:X.X".
 
@@ -118,6 +124,23 @@ class JudgeAgent:
 
                 data: dict[str, Any] = json.loads(raw_text)
                 decision = JudgeDecision(**data)
+
+                # Clamp stop-loss and target to strict Rs 700 max loss and Rs 1,000 max gain
+                if decision.decision != "NO_TRADE" and decision.entry_price_estimate > 0:
+                    from config import compute_clamped_sl_target
+                    clamped_sl, clamped_tgt = compute_clamped_sl_target(
+                        symbol=snapshot.symbol or "NIFTY",
+                        entry_price=decision.entry_price_estimate,
+                        stop_loss=decision.stop_loss,
+                        target=decision.target,
+                    )
+                    decision.stop_loss = clamped_sl
+                    decision.target = clamped_tgt
+                    risk = decision.entry_price_estimate - clamped_sl
+                    reward = clamped_tgt - decision.entry_price_estimate
+                    if risk > 0:
+                        decision.risk_reward_ratio = f"1:{round(reward / risk, 1)}"
+
                 logger.info(
                     "JudgeAgent → decision=%s strike=%s RR=%s (model=%s)",
                     decision.decision,

@@ -387,106 +387,164 @@ function TradeHistoryTab({ trades, summary }) {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table & Mobile Cards */}
       {paged.length === 0 ? (
         <div className="text-center py-12 text-slate-500">
           <Clock size={32} className="mx-auto mb-3 opacity-40 text-slate-400" />
           <p className="text-sm font-medium">No closed trades recorded yet</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="text-[11px] text-slate-400 uppercase tracking-wider border-b border-slate-800 bg-slate-950">
-                <th className="text-left py-3 pl-3">#</th>
-                <th className="text-left py-3">Date (IST)</th>
-                <th className="text-left py-3">Source</th>
-                <th className="text-left py-3">Symbol</th>
-                <th className="text-left py-3">Type</th>
-                <th className="text-right py-3">Entry (LTP / Total)</th>
-                <th className="text-right py-3">Exit (LTP / Total)</th>
-                <th className="text-right py-3">Net P&L</th>
-                <th className="text-right py-3 pr-3">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paged.map((trade, i) => {
-                const status = trade.status || (trade.exit_price ? 'CLOSED' : 'OPEN');
-                const isManual = trade.trade_source === 'MANUAL';
-                const sym = trade.index_symbol || (trade.option_symbol?.includes('BANK') ? 'BANKNIFTY' : 'NIFTY');
-                const lotSize = sym === 'BANKNIFTY' ? 15 : 25;
-                const qty = trade.quantity || lotSize;
-                const entryVal = trade.entry_price ? trade.entry_price * qty : null;
-                const exitVal = trade.exit_price ? trade.exit_price * qty : null;
+        <>
+          {/* Mobile Card List (Visible on screens < 768px) */}
+          <div className="block md:hidden space-y-2.5">
+            {paged.map((trade, i) => {
+              const status = trade.status || (trade.exit_price ? 'CLOSED' : 'OPEN');
+              const isManual = trade.trade_source === 'MANUAL';
+              const sym = trade.index_symbol || (trade.option_symbol?.includes('BANK') ? 'BANKNIFTY' : 'NIFTY');
+              const lotSize = sym === 'BANKNIFTY' ? 15 : 25;
+              const qty = trade.quantity || lotSize;
+              const pnl = trade.pnl ?? trade.realized_pnl;
 
-                return (
-                  <tr
-                    key={trade.id || i}
-                    className="border-b border-slate-850 hover:bg-slate-800/40 transition-colors"
-                  >
-                    <td className="py-3 pl-3 text-slate-500 font-mono text-xs">
-                      {page * perPage + i + 1}
-                    </td>
-                    <td className="py-3 text-slate-400 text-xs font-mono whitespace-nowrap">
-                      {formatDate(trade.created_at || trade.timestamp || trade.opened_at)}
-                    </td>
-                    <td className="py-3">
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          isManual
-                            ? 'bg-indigo-950 text-indigo-300 border border-indigo-700'
-                            : 'bg-blue-950 text-blue-300 border border-blue-700'
-                        }`}
-                      >
-                        {isManual ? 'MANUAL' : 'AI DEBATE'}
+              return (
+                <div
+                  key={`mob-hist-${trade.id || i}`}
+                  className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-white text-sm">
+                        {trade.option_symbol || trade.symbol || sym}
                       </span>
-                    </td>
-                    <td className="py-3 font-mono font-semibold text-slate-200">
-                      {trade.option_symbol || trade.symbol || sym}
-                    </td>
-                    <td className="py-3">
-                      <VerdictPill verdict={trade.trade_type || trade.type || trade.side} />
-                    </td>
-                    <td className="py-3 text-right">
-                      <div className="font-mono text-slate-200 text-xs">
-                        ₹{Number(trade.entry_price || 0).toFixed(2)}
-                      </div>
-                      {entryVal && (
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          ₹{Math.round(entryVal).toLocaleString('en-IN')} (1L)
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 text-right">
-                      <div className="font-mono text-slate-200 text-xs">
-                        {trade.exit_price ? `₹${Number(trade.exit_price).toFixed(2)}` : '—'}
-                      </div>
-                      {exitVal && (
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          ₹{Math.round(exitVal).toLocaleString('en-IN')}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 text-right font-mono">
-                      {formatPnl(trade.pnl ?? trade.realized_pnl)}
-                    </td>
-                    <td className="py-3 pr-3 text-right">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
-                          status === 'CLOSED' || status === 'closed'
-                            ? 'bg-slate-800 text-slate-400'
-                            : 'bg-blue-950 text-blue-300 border border-blue-700'
-                        }`}
-                      >
-                        {status}
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                        isManual ? 'bg-indigo-950 text-indigo-300 border border-indigo-700' : 'bg-blue-950 text-blue-300 border border-blue-700'
+                      }`}>
+                        {isManual ? 'MANUAL' : 'AI'}
                       </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                    <VerdictPill verdict={trade.trade_type || trade.type || trade.side} />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 py-1 text-center font-mono">
+                    <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">Entry</span>
+                      <span className="font-bold text-slate-200">₹{Number(trade.entry_price || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">Exit</span>
+                      <span className="font-bold text-slate-200">{trade.exit_price ? `₹${Number(trade.exit_price).toFixed(2)}` : '—'}</span>
+                    </div>
+                    <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">Net P&L</span>
+                      <span className="font-bold">{formatPnl(pnl)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1">
+                    <span>{formatDate(trade.created_at || trade.timestamp || trade.opened_at)}</span>
+                    <span className="px-2 py-0.5 rounded bg-slate-850 text-slate-300 text-[10px] font-bold">
+                      {status}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table (Hidden on screens < 768px) */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="text-[11px] text-slate-400 uppercase tracking-wider border-b border-slate-800 bg-slate-950">
+                  <th className="text-left py-3 pl-3">#</th>
+                  <th className="text-left py-3">Date (IST)</th>
+                  <th className="text-left py-3">Source</th>
+                  <th className="text-left py-3">Symbol</th>
+                  <th className="text-left py-3">Type</th>
+                  <th className="text-right py-3">Entry (LTP / Total)</th>
+                  <th className="text-right py-3">Exit (LTP / Total)</th>
+                  <th className="text-right py-3">Net P&L</th>
+                  <th className="text-right py-3 pr-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paged.map((trade, i) => {
+                  const status = trade.status || (trade.exit_price ? 'CLOSED' : 'OPEN');
+                  const isManual = trade.trade_source === 'MANUAL';
+                  const sym = trade.index_symbol || (trade.option_symbol?.includes('BANK') ? 'BANKNIFTY' : 'NIFTY');
+                  const lotSize = sym === 'BANKNIFTY' ? 15 : 25;
+                  const qty = trade.quantity || lotSize;
+                  const entryVal = trade.entry_price ? trade.entry_price * qty : null;
+                  const exitVal = trade.exit_price ? trade.exit_price * qty : null;
+
+                  return (
+                    <tr
+                      key={trade.id || i}
+                      className="border-b border-slate-850 hover:bg-slate-800/40 transition-colors"
+                    >
+                      <td className="py-3 pl-3 text-slate-500 font-mono text-xs">
+                        {page * perPage + i + 1}
+                      </td>
+                      <td className="py-3 text-slate-400 text-xs font-mono whitespace-nowrap">
+                        {formatDate(trade.created_at || trade.timestamp || trade.opened_at)}
+                      </td>
+                      <td className="py-3">
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            isManual
+                              ? 'bg-indigo-950 text-indigo-300 border border-indigo-700'
+                              : 'bg-blue-950 text-blue-300 border border-blue-700'
+                          }`}
+                        >
+                          {isManual ? 'MANUAL' : 'AI DEBATE'}
+                        </span>
+                      </td>
+                      <td className="py-3 font-mono font-semibold text-slate-200">
+                        {trade.option_symbol || trade.symbol || sym}
+                      </td>
+                      <td className="py-3">
+                        <VerdictPill verdict={trade.trade_type || trade.type || trade.side} />
+                      </td>
+                      <td className="py-3 text-right">
+                        <div className="font-mono text-slate-200 text-xs">
+                          ₹{Number(trade.entry_price || 0).toFixed(2)}
+                        </div>
+                        {entryVal && (
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            ₹{Math.round(entryVal).toLocaleString('en-IN')} (1L)
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 text-right">
+                        <div className="font-mono text-slate-200 text-xs">
+                          {trade.exit_price ? `₹${Number(trade.exit_price).toFixed(2)}` : '—'}
+                        </div>
+                        {exitVal && (
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            ₹{Math.round(exitVal).toLocaleString('en-IN')}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 text-right font-mono">
+                        {formatPnl(trade.pnl ?? trade.realized_pnl)}
+                      </td>
+                      <td className="py-3 pr-3 text-right">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                            status === 'CLOSED' || status === 'closed'
+                              ? 'bg-slate-800 text-slate-400'
+                              : 'bg-blue-950 text-blue-300 border border-blue-700'
+                          }`}
+                        >
+                          {status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Pagination */}
@@ -552,28 +610,28 @@ function DebateHistoryTab({ debates }) {
             <button
               key={d.id || i}
               onClick={() => setSelectedDebate(d)}
-              className="w-full text-left p-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors flex items-center justify-between"
+              className="w-full text-left p-3 sm:p-3.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <span className="font-mono text-xs text-slate-500">#{d.id}</span>
-                <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-mono">
+                <span className="text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-mono">
                   {idxSym === 'BANKNIFTY' ? 'BANK NIFTY' : 'NIFTY 50'}
                 </span>
-                <span className="text-xs text-slate-400 font-mono">{formatDate(d.timestamp_ist || d.timestamp || d.created_at)}</span>
-                <span className="text-xs font-mono font-bold text-blue-400">
+                <span className="text-[11px] sm:text-xs text-slate-400 font-mono">{formatDate(d.timestamp_ist || d.timestamp || d.created_at)}</span>
+                <span className="text-[11px] sm:text-xs font-mono font-bold text-blue-400">
                   Spot: ₹{Number(spot).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
-                <div className="hidden sm:flex items-center gap-2 text-xs font-mono">
+                <div className="flex items-center gap-2 text-[11px] sm:text-xs font-mono">
                   <span className="text-emerald-400">🐂 {bullConf}/10</span>
                   <span className="text-slate-600">•</span>
                   <span className="text-rose-400">🐻 {bearConf}/10</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between sm:justify-end gap-3 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-800">
                 <VerdictPill verdict={rawVerdict} />
                 <span className="text-xs text-blue-400 font-semibold hover:underline flex items-center gap-1">
-                  <Eye size={13} /> View Debate
+                  <Eye size={13} /> View
                 </span>
               </div>
             </button>
@@ -627,7 +685,7 @@ export default function TradeHistory({
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
       {/* Clean Solid Tab Bar */}
-      <div className="flex border-b border-slate-800 bg-slate-950 overflow-x-auto">
+      <div className="flex border-b border-slate-800 bg-slate-950 overflow-x-auto scrollbar-none">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -636,20 +694,20 @@ export default function TradeHistory({
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`
-                flex items-center gap-2 px-5 py-3.5 text-xs font-bold uppercase tracking-wider transition-colors relative whitespace-nowrap
+                flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2.5 sm:py-3.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-colors relative whitespace-nowrap
                 ${isActive
                   ? 'text-white bg-slate-900'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                 }
               `}
             >
-              <Icon size={15} />
+              <Icon size={14} />
               <span>{tab.label}</span>
               {isActive && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />
               )}
               {tab.id === 'active' && activeTrades?.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white">
+                <span className="ml-1 px-1.5 py-0.2 rounded text-[9px] sm:text-[10px] font-bold bg-blue-600 text-white">
                   {activeTrades.length}
                 </span>
               )}
@@ -659,7 +717,7 @@ export default function TradeHistory({
       </div>
 
       {/* Tab Content */}
-      <div className="p-5">
+      <div className="p-3 sm:p-5">
         {activeTab === 'chain' && (
           <OptionChainBoard
             selectedIndex={selectedIndex}
