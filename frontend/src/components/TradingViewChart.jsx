@@ -23,6 +23,7 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
   const [selectedTf, setSelectedTf] = useState(TIMEFRAMES[1]); // default 15m
   const [isExpanded, setIsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState('angelone');
   const [lastBar, setLastBar] = useState(null);
   const [hoverBar, setHoverBar] = useState(null);
 

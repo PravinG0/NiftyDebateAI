@@ -9,5 +9,6 @@ apscheduler
 pydantic
 pydantic-settings
 numpy
+pyotp
 pytest
 pytest-asyncio

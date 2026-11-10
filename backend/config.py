@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     OPENALGO_API_KEY: str = Field(default="")
     OPENALGO_BASE_URL: str = Field(default="")
     DATABASE_URL: str = Field(default=f"sqlite+aiosqlite:///{_env_path.parent / 'niftydebate.db'}")
+    ANGEL_API_KEY: str = Field(default="")
+    ANGEL_CLIENT_CODE: str = Field(default="")
+    ANGEL_PIN: str = Field(default="")
+    ANGEL_TOTP_SECRET: str = Field(default="")
 
     # ── Safety / Sandbox Paper Trading ────────────────────────────────────
     FORCE_ANALYZER_MODE: bool = Field(default=True)

@@ -833,6 +833,27 @@ class DhanClient:
         if cached is not None:
             return cached
 
+        # Prioritize Angel One SmartAPI live LTP
+        try:
+            from angel_client import get_angel_client
+            angel = get_angel_client()
+            if angel.is_configured():
+                angel_ltp = await angel.get_ltp(sym)
+                if angel_ltp is not None and angel_ltp > 0:
+                    res = {
+                        "spot_price": round(angel_ltp, 2),
+                        "previous_close": round(angel_ltp, 2),
+                        "high": round(angel_ltp, 2),
+                        "low": round(angel_ltp, 2),
+                        "open": round(angel_ltp, 2),
+                    }
+                    self.ttl_cache.set(cache_key, res, ttl=5.0)
+                    self.ttl_cache.set(f"ltp_{sym}", round(angel_ltp, 2), ttl=5.0)
+                    self.disk_cache.update_snapshot(sym, spot_price=round(angel_ltp, 2))
+                    return res
+        except Exception as exc:
+            logger.debug("Angel One LTP feed skipped for %s: %s", sym, exc)
+
         ticker = map_symbol_to_yahoo_ticker(sym)
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=15m&range=1d"
         clean_sym = sym.replace(".NS", "").replace("^", "").replace("%5E", "")
@@ -1224,8 +1245,22 @@ class DhanClient:
         count: int = 75,
         range_period: str = "5d",
     ) -> list[dict[str, Any]]:
-        """Return real ascending OHLC candles for charting."""
+        """Return real ascending OHLC candles for charting, prioritizing Angel One SmartAPI."""
         sym = symbol.upper()
+
+        # 1. Angel One SmartAPI (First priority: real 0-delay exchange candles)
+        try:
+            from angel_client import get_angel_client
+            angel = get_angel_client()
+            if angel.is_configured():
+                angel_candles = await angel.get_candles(sym, interval=interval, range_period=range_period)
+                if angel_candles:
+                    self._last_candle_source = "angelone"
+                    return angel_candles
+        except Exception as exc:
+            logger.debug("Angel One candles unavailable for %s: %s", sym, exc)
+
+        # 2. Yahoo Finance fallback
         real_candles = await self.fetch_real_exchange_candles(sym, interval=interval, range_period=range_period)
         if real_candles:
             self._last_candle_source = "yahoo"

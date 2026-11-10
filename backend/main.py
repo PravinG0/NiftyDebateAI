@@ -487,6 +487,10 @@ async def get_system_status(
     lot_size = 15 if "BANK" in sel_sym else 25
     spot_price = banknifty_spot if "BANK" in sel_sym else nifty_spot
 
+    from angel_client import get_angel_client
+    angel = get_angel_client()
+    angel_conn = angel.is_configured()
+
     dhan_conn = await dhan.get_connection_status()
     sched = scheduler_status()
     is_sched_running = sched.get("running", False)
@@ -502,6 +506,8 @@ async def get_system_status(
         "dhan_source": dhan_conn.get("source", "TIER_3"),
         "dhan_tier": dhan_conn.get("dhan_tier", 3),
         "dhan_details": dhan_conn.get("details", "Operating normally"),
+        "angel_connected": angel_conn,
+        "angel_configured": angel_conn,
         "selected_index": sel_sym,
         "symbol": sel_sym,
         "nifty_spot": nifty_spot,

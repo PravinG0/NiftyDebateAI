@@ -152,7 +152,8 @@ class TestChartDataEndpointAndFormatting:
         """Verify chart endpoint gracefully falls back when Yahoo Finance network call fails."""
         dhan = get_dhan_client()
 
-        with patch.object(dhan, "fetch_real_exchange_candles", return_value=[]):
+        with patch.object(dhan, "fetch_real_exchange_candles", return_value=[]), \
+             patch("angel_client.AngelClient.get_candles", return_value=[]):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.get("/api/market/candles?symbol=NIFTY&interval=5m&range_period=5d")
