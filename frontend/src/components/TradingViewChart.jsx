@@ -17,7 +17,9 @@ const TIMEFRAMES = [
 ];
 
 function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
-  const [selectedPreset, setSelectedPreset] = useState(PRESET_SYMBOLS[0]);
+  const [selectedPreset, setSelectedPreset] = useState(() => {
+    return PRESET_SYMBOLS.find((p) => p.symbol === selectedIndex) || PRESET_SYMBOLS[0];
+  });
   const [selectedTf, setSelectedTf] = useState(TIMEFRAMES[1]); // default 15m
   const [isExpanded, setIsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -27,46 +29,99 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
+  const requestIdRef = useRef(0);
+  const isMountedRef = useRef(false);
 
   // Sync index preset when parent index changes
   useEffect(() => {
-    if (selectedIndex === 'BANKNIFTY') {
-      setSelectedPreset(PRESET_SYMBOLS[1]);
-    } else {
-      setSelectedPreset(PRESET_SYMBOLS[0]);
+    const matched = PRESET_SYMBOLS.find((p) => p.symbol === selectedIndex);
+    if (matched && matched.symbol !== selectedPreset.symbol) {
+      setSelectedPreset(matched);
     }
-  }, [selectedIndex]);
+  }, [selectedIndex, selectedPreset.symbol]);
 
-  // Fetch candle data and update chart
-  const loadCandleData = useCallback(async () => {
-    try {
+  // Fetch candle data and update chart (with race condition protection and optional silent mode)
+  const loadCandleData = useCallback(async (presetParam, tfParam, isSilentParam = false) => {
+    // Defensively handle when called from event handlers (e.g. onClick={loadCandleData})
+    const preset = (presetParam && typeof presetParam === 'object' && presetParam.symbol) ? presetParam : selectedPreset;
+    const tf = (tfParam && typeof tfParam === 'object' && tfParam.interval) ? tfParam : selectedTf;
+    const isSilent = typeof isSilentParam === 'boolean' ? isSilentParam : false;
+
+    const reqId = ++requestIdRef.current;
+    if (!isSilent) {
       setLoading(true);
-      const res = await getMarketCandles(selectedPreset.symbol, selectedTf.interval, selectedTf.range);
-      const candles = res.data?.candles || [];
-      if (candles.length > 0 && seriesRef.current) {
-        const sorted = [...candles].sort((a, b) => a.time - b.time);
-        seriesRef.current.setData(sorted);
-        chartRef.current?.timeScale().fitContent();
+    }
+    try {
+      const res = await getMarketCandles(preset.symbol, tf.interval, tf.range);
 
-        const latest = sorted[sorted.length - 1];
-        const prev = sorted.length > 1 ? sorted[sorted.length - 2] : latest;
-        const change = latest.close - prev.close;
-        const changePct = prev.close > 0 ? (change / prev.close) * 100 : 0;
-        setLastBar({ ...latest, change, changePct });
+      // Discard stale out-of-order responses or if chart unmounted
+      if (reqId !== requestIdRef.current || !seriesRef.current) return;
+      if (res.data?.symbol && res.data.symbol.toUpperCase() !== preset.symbol.toUpperCase()) return;
+
+      const rawCandles = res.data?.candles || [];
+      if (rawCandles.length > 0) {
+        const sorted = [...rawCandles].sort((a, b) => a.time - b.time);
+        const clean = [];
+        let lastTime = -1;
+        for (const c of sorted) {
+          if (
+            c &&
+            typeof c.time === 'number' &&
+            c.time > lastTime &&
+            c.open != null &&
+            c.high != null &&
+            c.low != null &&
+            c.close != null &&
+            !isNaN(c.open) &&
+            !isNaN(c.high) &&
+            !isNaN(c.low) &&
+            !isNaN(c.close)
+          ) {
+            clean.push({
+              time: c.time,
+              open: Number(c.open),
+              high: Math.max(Number(c.high), Number(c.open), Number(c.close)),
+              low: Math.min(Number(c.low), Number(c.open), Number(c.close)),
+              close: Number(c.close),
+            });
+            lastTime = c.time;
+          }
+        }
+        if (clean.length > 0 && seriesRef.current && reqId === requestIdRef.current) {
+          seriesRef.current.setData(clean);
+          chartRef.current?.timeScale().fitContent();
+
+          const latest = clean[clean.length - 1];
+          const prev = clean.length > 1 ? clean[clean.length - 2] : latest;
+          const change = latest.close - prev.close;
+          const changePct = prev.close > 0 ? (change / prev.close) * 100 : 0;
+          setLastBar({ ...latest, change, changePct });
+        } else if (clean.length === 0 && seriesRef.current && reqId === requestIdRef.current) {
+          seriesRef.current.setData([]);
+          setLastBar(null);
+        }
+      } else if (seriesRef.current && reqId === requestIdRef.current) {
+        seriesRef.current.setData([]);
+        setLastBar(null);
       }
     } catch (err) {
       console.error('Failed to load candles:', err);
     } finally {
-      setLoading(false);
+      if (reqId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [selectedPreset, selectedTf]);
 
-  // Initialize TradingView Lightweight Chart
+  // Initialize TradingView Lightweight Chart ONCE on mount
   useEffect(() => {
     const container = chartContainerRef.current;
     if (!container) return;
 
     const chart = createChart(container, {
+      width: container.clientWidth || undefined,
+      height: container.clientHeight || undefined,
+      autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: '#090d16' },
         textColor: '#94a3b8',
@@ -124,43 +179,62 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
 
     chartRef.current = chart;
     seriesRef.current = series;
+    isMountedRef.current = true;
 
     // Track crosshair hover for real-time OHLC display
     chart.subscribeCrosshairMove((param) => {
       if (param.time) {
         const data = param.seriesData.get(series);
         if (data) {
-          setHoverBar(data);
+          const change = (data.close != null && data.open != null) ? data.close - data.open : 0;
+          const changePct = (data.open && data.open > 0) ? (change / data.open) * 100 : 0;
+          setHoverBar({ ...data, change, changePct });
           return;
         }
       }
       setHoverBar(null);
     });
 
-    // ResizeObserver for reliable mobile layout and orientation change resizing
+    // ResizeObserver for reliable responsive resizing
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0) return;
       const { width, height } = entries[0].contentRect;
       if (width > 0 && height > 0) {
         chart.applyOptions({ width, height });
+        chart.timeScale().fitContent();
       }
     });
     resizeObserver.observe(container);
 
+    // Initial data load on mount
+    loadCandleData(selectedPreset, selectedTf);
+
     return () => {
+      isMountedRef.current = false;
       resizeObserver.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, []);
+  }, []); // Mount only once
 
-  // Reload data when preset symbol or timeframe changes
+  // Reload data when preset symbol or timeframe changes (skipping initial mount)
+  const hasMountedRef = useRef(false);
   useEffect(() => {
-    loadCandleData();
-    const interval = setInterval(loadCandleData, 20000); // 20s live poll
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    loadCandleData(selectedPreset, selectedTf);
+  }, [selectedPreset, selectedTf, loadCandleData]);
+
+  // Periodic silent background poll every 20 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadCandleData(selectedPreset, selectedTf, true);
+    }, 20000);
     return () => clearInterval(interval);
-  }, [loadCandleData]);
+  }, [selectedPreset, selectedTf, loadCandleData]);
 
   // Adjust chart size on expand toggle
   useEffect(() => {
@@ -217,7 +291,7 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
           {/* Mobile Right Action shortcuts */}
           <div className="flex sm:hidden items-center gap-1">
             <button
-              onClick={loadCandleData}
+              onClick={() => loadCandleData(selectedPreset, selectedTf)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
             >
               <RefreshCw size={14} className={loading ? 'animate-spin text-blue-400' : ''} />
@@ -281,7 +355,7 @@ function TradingViewChart({ selectedIndex = 'NIFTY', onSelectIndex }) {
           {/* Desktop Actions */}
           <div className="hidden sm:flex items-center gap-1.5">
             <button
-              onClick={loadCandleData}
+              onClick={() => loadCandleData(selectedPreset, selectedTf)}
               title="Refresh candles"
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
             >

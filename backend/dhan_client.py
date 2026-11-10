@@ -15,6 +15,7 @@ Fulfills Requirement R1:
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import math
@@ -81,6 +82,41 @@ INDEX_METADATA: dict[str, dict[str, Any]] = {
         "close": 14.50,
     },
 }
+
+def normalize_symbol(symbol: str) -> str:
+    """Normalize symbol to standard index/stock canonical representation."""
+    if not symbol:
+        return "NIFTY"
+    s = str(symbol).strip().upper()
+    if not s or s in ("NONE", "NULL"):
+        return "NIFTY"
+    if s in ("NIFTY", "NIFTY50", "NIFTY 50", "^NSEI", "%5ENSEI", "NSEI"):
+        return "NIFTY"
+    if s in ("BANKNIFTY", "BANK NIFTY", "BANK_NIFTY", "^NSEBANK", "%5ENSEBANK", "NSEBANK"):
+        return "BANKNIFTY"
+    if s in ("INDIA_VIX", "INDIAVIX", "VIX", "^INDIAVIX", "%5EINDIAVIX"):
+        return "INDIA_VIX"
+    clean = s.replace(".NS", "").replace(".BO", "").replace("^", "").replace("%5E", "")
+    return clean or "NIFTY"
+
+def map_symbol_to_yahoo_ticker(symbol: str) -> str:
+    """Map user/index/stock symbols to valid Yahoo Finance tickers."""
+    if not symbol:
+        return "%5ENSEI"
+    s = str(symbol).strip().upper()
+    if not s or s in ("NONE", "NULL"):
+        return "%5ENSEI"
+    if s in ("NIFTY", "NIFTY50", "NIFTY 50", "^NSEI", "%5ENSEI", "NSEI"):
+        return "%5ENSEI"
+    if s in ("BANKNIFTY", "BANK NIFTY", "BANK_NIFTY", "^NSEBANK", "%5ENSEBANK", "NSEBANK"):
+        return "%5ENSEBANK"
+    if s in ("INDIA_VIX", "INDIAVIX", "VIX", "^INDIAVIX", "%5EINDIAVIX"):
+        return "%5EINDIAVIX"
+    if s.endswith(".NS") or s.endswith(".BO"):
+        return s
+    if s.startswith("^") or s.startswith("%5E"):
+        return s
+    return f"{s}.NS"
 
 # ── Custom Exceptions ─────────────────────────────────────────────────────────
 class DhanAPIError(Exception):
@@ -212,18 +248,24 @@ class DiskCacheManager:
 
     def _ensure_cache_file(self) -> None:
         if not self.cache_file.exists():
-            self.save_cache(self.DEFAULT_SEEDS)
+            self.save_cache(copy.deepcopy(self.DEFAULT_SEEDS))
 
     def load_cache(self) -> dict[str, Any]:
         try:
             with open(self.cache_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                if not isinstance(data, dict):
+                    raise ValueError("Disk cache root is not a dict")
+                return data
         except Exception as exc:
             logger.warning("Failed to read disk cache (%s); reseeding defaults.", exc)
-            self.save_cache(self.DEFAULT_SEEDS)
-            return self.DEFAULT_SEEDS
+            defaults = copy.deepcopy(self.DEFAULT_SEEDS)
+            self.save_cache(defaults)
+            return defaults
 
     def save_cache(self, data: dict[str, Any]) -> None:
+        if not isinstance(data, dict):
+            data = copy.deepcopy(self.DEFAULT_SEEDS)
         data["updated_at"] = datetime.now(IST).isoformat()
         temp_file = self.cache_file.with_suffix(".tmp")
         try:
@@ -236,10 +278,14 @@ class DiskCacheManager:
 
     def get_snapshot(self, symbol: str) -> Optional[dict[str, Any]]:
         cache = self.load_cache()
+        if not isinstance(cache, dict):
+            return None
         return cache.get("indices", {}).get(symbol.upper())
 
     def update_snapshot(self, symbol: str, spot_price: float, ohlc: Optional[dict[str, float]] = None) -> None:
         cache = self.load_cache()
+        if not isinstance(cache, dict):
+            cache = copy.deepcopy(self.DEFAULT_SEEDS)
         indices = cache.setdefault("indices", {})
         sym = symbol.upper()
         ind = indices.setdefault(sym, {})
@@ -320,9 +366,11 @@ class MarketSimulator:
     """Mean-reverting Geometric Brownian Motion tick generator and synthetic market data."""
 
     ANCHORS = {
-        "NIFTY": 25044.65,
-        "BANKNIFTY": 59741.25,
+        "NIFTY": 24986.40,
+        "BANKNIFTY": 52140.80,
         "INDIA_VIX": 14.50,
+        "RELIANCE": 1324.40,
+        "HDFCBANK": 798.15,
     }
     STEPS = {
         "NIFTY": 50,
@@ -481,8 +529,15 @@ class MarketSimulator:
     ) -> list[dict[str, Any]]:
         """Generate deterministic and realistic ascending OHLC candles for charts."""
         sym = symbol.upper()
-        spot = self._current_spots.get(sym, self.ANCHORS.get(sym, 24986.40))
-        step_sigma = 18.0 if "BANK" in sym else 8.0
+        norm_sym = normalize_symbol(sym)
+        spot = self._current_spots.get(
+            sym,
+            self._current_spots.get(
+                norm_sym,
+                self.ANCHORS.get(sym, self.ANCHORS.get(norm_sym, 25044.65)),
+            ),
+        )
+        step_sigma = 18.0 if "BANK" in norm_sym else (2.0 if spot < 3000 else 8.0)
 
         # Parse interval minutes
         interval_minutes = 5
@@ -543,6 +598,7 @@ class DhanClient:
         self.simulator = MarketSimulator()
 
         self._http: Optional[httpx.AsyncClient] = None
+        self._yahoo_http: Optional[httpx.AsyncClient] = None
         self._rate_limited_until: float = 0.0
         self._data_api_unsubscribed: bool = False
         self._auth_valid: Optional[bool] = None
@@ -561,17 +617,49 @@ class DhanClient:
         }
 
     async def get_client(self) -> httpx.AsyncClient:
-        if self._http is None or self._http.is_closed:
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        if (
+            self._http is None
+            or self._http.is_closed
+            or getattr(self, "_http_loop", None) != current_loop
+        ):
             self._http = httpx.AsyncClient(
                 base_url=self.base_url,
                 headers=self.headers,
                 timeout=httpx.Timeout(5.0, connect=3.0),
             )
+            self._http_loop = current_loop
         return self._http
+
+    async def get_yahoo_client(self) -> httpx.AsyncClient:
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        if (
+            self._yahoo_http is None
+            or self._yahoo_http.is_closed
+            or getattr(self, "_yahoo_http_loop", None) != current_loop
+        ):
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+            }
+            self._yahoo_http = httpx.AsyncClient(
+                headers=headers,
+                timeout=httpx.Timeout(8.0, connect=4.0),
+            )
+            self._yahoo_http_loop = current_loop
+        return self._yahoo_http
 
     async def aclose(self) -> None:
         if self._http and not self._http.is_closed:
             await self._http.aclose()
+        if getattr(self, "_yahoo_http", None) and not self._yahoo_http.is_closed:
+            await self._yahoo_http.aclose()
 
     async def close(self) -> None:
         await self.aclose()
@@ -745,25 +833,41 @@ class DhanClient:
         if cached is not None:
             return cached
 
-        ticker = "%5ENSEBANK" if "BANK" in sym else "%5ENSEI"
+        ticker = map_symbol_to_yahoo_ticker(sym)
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=15m&range=1d"
+        clean_sym = sym.replace(".NS", "").replace("^", "").replace("%5E", "")
+        default_anchor = self.simulator.ANCHORS.get(sym, self.simulator.ANCHORS.get(clean_sym, 59741.25 if "BANK" in sym else 25044.65))
         try:
-            async with httpx.AsyncClient(timeout=4.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
-                resp = await client.get(url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    meta = data["chart"]["result"][0]["meta"]
-                    default_anchor = 59741.25 if "BANK" in sym else 25044.65
+            client = await self.get_yahoo_client()
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                res_list = data.get("chart", {}).get("result")
+                if res_list:
+                    meta = res_list[0].get("meta", {})
                     spot = float(meta.get("regularMarketPrice") or meta.get("chartPreviousClose") or default_anchor)
                     prev = float(meta.get("previousClose") or meta.get("chartPreviousClose") or spot)
                     high = float(meta.get("regularMarketDayHigh") or spot)
                     low = float(meta.get("regularMarketDayLow") or spot)
+
+                    # Extract accurate open price from meta or first non-null quote open
+                    open_val = meta.get("regularMarketOpen")
+                    if open_val is None:
+                        quotes_list = res_list[0].get("indicators", {}).get("quote", [])
+                        if quotes_list:
+                            for candidate in (quotes_list[0].get("open") or []):
+                                if candidate is not None and candidate > 0:
+                                    open_val = candidate
+                                    break
+                    if open_val is None:
+                        open_val = meta.get("chartPreviousClose") or spot
+
                     res = {
                         "spot_price": round(spot, 2),
                         "previous_close": round(prev, 2),
                         "high": round(high, 2),
                         "low": round(low, 2),
-                        "open": round(float(meta.get("regularMarketPrice") or spot), 2),
+                        "open": round(float(open_val), 2),
                     }
                     self.ttl_cache.set(cache_key, res, ttl=5.0)
                     self.ttl_cache.set(f"ltp_{sym}", round(spot, 2), ttl=5.0)
@@ -772,7 +876,7 @@ class DhanClient:
         except Exception as exc:
             logger.debug("Real exchange feed fetch failed for %s: %s", sym, exc)
 
-        default_spot = 59741.25 if "BANK" in sym else 25044.65
+        default_spot = default_anchor
         return {
             "spot_price": default_spot,
             "previous_close": default_spot,
@@ -811,8 +915,8 @@ class DhanClient:
         # Real Exchange Feed (Guaranteed real spot matching Dhan charts, e.g. 25,044.65)
         feed = await self.fetch_real_exchange_feed(sym)
         spot = feed["spot_price"]
-        self._status = "LIVE"
-        self._tier = 1
+        self._status = "FALLBACK"
+        self._tier = 2
         self._reason = "Real Exchange Market Feed Active (NSE)"
         self._last_live_timestamp = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
         self.ttl_cache.set(cache_key, spot, ttl=5.0)
@@ -1019,35 +1123,96 @@ class DhanClient:
         interval: str = "15m",
         range_period: str = "5d"
     ) -> list[dict[str, Any]]:
-        """Fetch real ascending OHLC candles directly from exchange feed."""
+        """Fetch real ascending OHLC candles directly from Yahoo Finance exchange feed."""
         sym = symbol.upper()
-        ticker = "%5ENSEBANK" if "BANK" in sym else "%5ENSEI"
-        valid_range = "5d" if range_period in ("1d", "5d", "7d") else "1mo"
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval={interval}&range={valid_range}"
+        ticker = map_symbol_to_yahoo_ticker(sym)
+
+        # Normalize interval and range
+        valid_intervals = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo", "3mo"}
+        norm_interval = interval.lower() if interval.lower() in valid_intervals else "5m"
+
+        valid_ranges = {"1d", "5d", "7d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
+        if range_period.lower() in valid_ranges:
+            norm_range = range_period.lower()
+        elif norm_interval in ("1d", "1wk", "1mo"):
+            norm_range = "1mo"
+        else:
+            norm_range = "5d"
+
+        cache_key = f"real_candles_{ticker}_{norm_interval}_{norm_range}"
+        cached = self.ttl_cache.get(cache_key)
+        if cached is not None:
+            return [c.copy() for c in cached]
+
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval={norm_interval}&range={norm_range}"
         try:
-            async with httpx.AsyncClient(timeout=5.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
-                resp = await client.get(url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    res = data["chart"]["result"][0]
-                    timestamps = res.get("timestamp", [])
-                    quotes = res["indicators"]["quote"][0]
-                    candles = []
-                    for i in range(len(timestamps)):
-                        o = quotes["open"][i]
-                        h = quotes["high"][i]
-                        l = quotes["low"][i]
-                        c = quotes["close"][i]
-                        if None not in (o, h, l, c):
-                            candles.append({
-                                "time": int(timestamps[i]),
-                                "open": round(float(o), 2),
-                                "high": round(float(h), 2),
-                                "low": round(float(l), 2),
-                                "close": round(float(c), 2),
-                            })
-                    if candles:
-                        return candles
+            client = await self.get_yahoo_client()
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                data = resp.json()
+                res_list = data.get("chart", {}).get("result")
+                if not res_list:
+                    logger.debug("No chart result from Yahoo for %s: %s", ticker, data.get("chart", {}).get("error"))
+                    return []
+                res = res_list[0]
+                timestamps = res.get("timestamp") or []
+                quote_indicators = res.get("indicators", {}).get("quote", [])
+                if not quote_indicators or not timestamps:
+                    return []
+                quotes = quote_indicators[0]
+                opens = quotes.get("open") or []
+                highs = quotes.get("high") or []
+                lows = quotes.get("low") or []
+                closes = quotes.get("close") or []
+
+                raw_bars = []
+                min_len = min(len(timestamps), len(opens), len(highs), len(lows), len(closes))
+                for i in range(min_len):
+                    o = opens[i]
+                    h = highs[i]
+                    l = lows[i]
+                    c = closes[i]
+                    ts = timestamps[i]
+                    if o is None or h is None or l is None or c is None or ts is None:
+                        continue
+                    try:
+                        t = int(ts)
+                        o_f = float(o)
+                        h_f = float(h)
+                        l_f = float(l)
+                        c_f = float(c)
+                    except (ValueError, TypeError):
+                        continue
+                    if not (math.isfinite(o_f) and math.isfinite(h_f) and math.isfinite(l_f) and math.isfinite(c_f)):
+                        continue
+                    if min(o_f, h_f, l_f, c_f) <= 0:
+                        continue
+                    raw_bars.append((t, o_f, h_f, l_f, c_f))
+
+                raw_bars.sort(key=lambda b: b[0])
+
+                candles = []
+                last_timestamp = -1
+                for t, o_f, h_f, l_f, c_f in raw_bars:
+                    # Strictly ascending timestamps requirement for lightweight-charts
+                    if t <= last_timestamp:
+                        continue
+                    o_f = round(o_f, 2)
+                    c_f = round(c_f, 2)
+                    h_f = round(max(h_f, o_f, c_f), 2)
+                    l_f = round(min(l_f, o_f, c_f), 2)
+                    candles.append({
+                        "time": t,
+                        "open": o_f,
+                        "high": h_f,
+                        "low": l_f,
+                        "close": c_f,
+                    })
+                    last_timestamp = t
+                if candles:
+                    ttl_sec = 30.0 if norm_interval in ("1d", "1wk", "1mo") else 5.0
+                    self.ttl_cache.set(cache_key, candles, ttl=ttl_sec)
+                    return [c.copy() for c in candles]
         except Exception as exc:
             logger.debug("Failed to fetch real candles for %s: %s", sym, exc)
         return []
@@ -1061,12 +1226,17 @@ class DhanClient:
     ) -> list[dict[str, Any]]:
         """Return real ascending OHLC candles for charting."""
         sym = symbol.upper()
-        if sym.startswith("^"):
-            sym = "BANKNIFTY" if "BANK" in sym else "NIFTY"
         real_candles = await self.fetch_real_exchange_candles(sym, interval=interval, range_period=range_period)
         if real_candles:
+            self._last_candle_source = "yahoo"
             return real_candles
+        self._last_candle_source = "simulator"
         return self.simulator.generate_candles(sym, interval=interval, count=count, range_period=range_period)
+
+    @property
+    def last_candle_source(self) -> str:
+        """Source of the most recently retrieved candle dataset."""
+        return getattr(self, "_last_candle_source", "yahoo")
 
     async def get_intraday_candles(
         self,

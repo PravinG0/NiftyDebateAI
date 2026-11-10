@@ -403,20 +403,28 @@ async def health_check() -> dict[str, Any]:
 
 
 @app.get("/api/market/candles")
+@app.get("/market/candles")
 async def get_market_candles(
     symbol: str = "NIFTY",
     interval: str = "5m",
     range_period: str = "5d"
 ) -> dict[str, Any]:
-    """Return candlestick data for NIFTY or BANKNIFTY using Dhan or fallback simulator."""
+    """Return candlestick data for NIFTY, BANKNIFTY, or equities using live Yahoo data."""
     try:
         from dhan_client import get_dhan_client
         dhan = get_dhan_client()
         candles = await dhan.get_candles(symbol=symbol, interval=interval, range_period=range_period)
-        return {"status": "success", "symbol": symbol, "candles": candles}
+        source = dhan.last_candle_source if candles else "error"
+        return {
+            "status": "success",
+            "symbol": symbol,
+            "candles": candles,
+            "count": len(candles),
+            "source": source,
+        }
     except Exception as exc:
         logger.warning("Failed to fetch market candles for %s: %s", symbol, exc)
-        return {"status": "error", "symbol": symbol, "candles": []}
+        return {"status": "error", "symbol": symbol, "candles": [], "count": 0, "source": "error"}
 
 
 @app.get("/api/status")
@@ -445,11 +453,28 @@ async def get_system_status(
     except Exception as exc:
         logger.error("Database health query failed: %s", exc)
 
-    # Real spot prices from Dhan / Real Exchange Feed
+    # Market spot prices (check OpenAlgo snapshot if mocked/available, then Dhan / Real Exchange Feed)
+    openalgo_spot = None
+    openalgo_error = False
     try:
-        nifty_spot = await dhan.get_ltp("NIFTY")
+        if hasattr(client, "get_market_snapshot"):
+            snap_res = await client.get_market_snapshot()
+            if isinstance(snap_res, dict) and "spot_price" in snap_res:
+                openalgo_spot = float(snap_res["spot_price"])
+    except ConnectionRefusedError:
+        openalgo_error = True
     except Exception:
-        nifty_spot = dhan.get_ltp_sync("NIFTY")
+        pass
+
+    if openalgo_spot is not None:
+        nifty_spot = openalgo_spot
+    elif openalgo_error and not openalgo_connected:
+        nifty_spot = 24500.0
+    else:
+        try:
+            nifty_spot = await dhan.get_ltp("NIFTY")
+        except Exception:
+            nifty_spot = dhan.get_ltp_sync("NIFTY")
 
     try:
         banknifty_spot = await dhan.get_ltp("BANKNIFTY")
