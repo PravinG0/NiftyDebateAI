@@ -39,12 +39,14 @@ export default function BullCard({ data, onSelectTrade, lotSize = 25, indexSymbo
   return (
     <div
       className={`
-        bg-slate-900 border ${highConfidence ? 'border-emerald-500' : 'border-slate-800'}
-        rounded-2xl overflow-hidden shadow-lg transition-all
+        bg-[#0D131F]/90 backdrop-blur-md border ${
+          highConfidence ? 'border-emerald-500/80 shadow-bull-glow' : 'border-slate-800/80'
+        }
+        rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:border-emerald-500/40
       `}
     >
       {/* Solid green accent bar */}
-      <div className="h-1.5 bg-emerald-500" />
+      <div className="h-1.5 bg-gradient-to-r from-emerald-500 to-teal-400" />
 
       <div className="p-5 space-y-4">
         {/* Header */}

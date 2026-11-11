@@ -12,3 +12,6 @@ numpy
 pyotp
 pytest
 pytest-asyncio
+asyncpg>=0.29.0
+bcrypt>=4.1.0
+pyjwt>=2.8.0

@@ -10,6 +10,7 @@ Exposes REST APIs for:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -33,13 +34,16 @@ from config import (
 from database import (
     DebateSessionModel,
     PaperTradeModel,
+    UserModel,
     async_session_factory,
     create_tables,
     engine,
     get_session,
 )
+from auth import auth_router, get_optional_user
+from user_routes import user_router
 from debate_engine import DebateEngine
-from market_data import build_market_snapshot, get_openalgo_client
+from market_data import build_market_snapshot, get_openalgo_client, market_router
 from openalgo_client import OpenAlgoClient, SafetyError
 from scheduler import (
     get_scheduler,
@@ -141,6 +145,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Routers ───────────────────────────────────────────────────────────────────
+
+app.include_router(auth_router)
+app.include_router(user_router)
+app.include_router(market_router)
 
 
 # ── Request / Helper Schemas ──────────────────────────────────────────────────
@@ -409,12 +419,12 @@ async def get_market_candles(
     interval: str = "5m",
     range_period: str = "5d"
 ) -> dict[str, Any]:
-    """Return candlestick data for NIFTY, BANKNIFTY, or equities using live Yahoo data."""
+    """Return candlestick data for NIFTY, BANKNIFTY prioritizing Angel One SmartAPI."""
     try:
-        from dhan_client import get_dhan_client
-        dhan = get_dhan_client()
-        candles = await dhan.get_candles(symbol=symbol, interval=interval, range_period=range_period)
-        source = dhan.last_candle_source if candles else "error"
+        from angel_client import get_angel_client
+        angel = get_angel_client()
+        candles = await angel.get_candles(symbol=symbol, interval=interval, range_period=range_period)
+        source = "angelone" if candles else "unavailable"
         return {
             "status": "success",
             "symbol": symbol,
@@ -432,10 +442,10 @@ async def get_system_status(
     symbol: Optional[str] = Query("NIFTY"),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Return health, Dhan connection, OpenAlgo connection, analyzer/sandbox mode, spot prices, and scheduler status."""
+    """Return health, Angel One connection, OpenAlgo connection, analyzer/sandbox mode, spot prices, and scheduler status."""
     client = await get_openalgo_client()
-    from dhan_client import get_dhan_client
-    dhan = get_dhan_client()
+    from angel_client import get_angel_client
+    angel = get_angel_client()
 
     openalgo_connected = False
     analyzer_mode = False
@@ -453,7 +463,7 @@ async def get_system_status(
     except Exception as exc:
         logger.error("Database health query failed: %s", exc)
 
-    # Market spot prices (check OpenAlgo snapshot if mocked/available, then Dhan / Real Exchange Feed)
+    # Market spot prices (check OpenAlgo snapshot if mocked/available, then Angel One SmartAPI / Cache)
     openalgo_spot = None
     openalgo_error = False
     try:
@@ -472,14 +482,18 @@ async def get_system_status(
         nifty_spot = 24500.0
     else:
         try:
-            nifty_spot = await dhan.get_ltp("NIFTY")
+            nifty_spot = await angel.get_ltp("NIFTY")
+            if nifty_spot is None or nifty_spot <= 0:
+                nifty_spot = 24986.40
         except Exception:
-            nifty_spot = dhan.get_ltp_sync("NIFTY")
+            nifty_spot = 24986.40
 
     try:
-        banknifty_spot = await dhan.get_ltp("BANKNIFTY")
+        banknifty_spot = await angel.get_ltp("BANKNIFTY")
+        if banknifty_spot is None or banknifty_spot <= 0:
+            banknifty_spot = 58850.65
     except Exception:
-        banknifty_spot = dhan.get_ltp_sync("BANKNIFTY")
+        banknifty_spot = 58850.65
 
     sel_sym = (symbol or "NIFTY").upper()
     if sel_sym not in ("NIFTY", "BANKNIFTY"):
@@ -487,11 +501,14 @@ async def get_system_status(
     lot_size = 15 if "BANK" in sel_sym else 25
     spot_price = banknifty_spot if "BANK" in sel_sym else nifty_spot
 
-    from angel_client import get_angel_client
-    angel = get_angel_client()
-    angel_conn = angel.is_configured()
+    try:
+        angel_conn_status = await angel.get_connection_status()
+    except Exception:
+        angel_conn_status = {}
+    angel_conn = angel_conn_status.get("angel_connected", angel.is_configured())
+    angel_status = angel_conn_status.get("angel_status", "CONNECTED" if angel_conn else "DISCONNECTED")
+    feed_source = angel_conn_status.get("angel_feed_source") or angel_conn_status.get("feed_source", "live_exchange" if angel_conn else "cached_close")
 
-    dhan_conn = await dhan.get_connection_status()
     sched = scheduler_status()
     is_sched_running = sched.get("running", False)
     next_run_val = sched.get("next_run")
@@ -501,13 +518,13 @@ async def get_system_status(
 
     return {
         "status": "ok",
-        "dhan_status": dhan_conn.get("status", "FALLBACK"),
-        "dhan_connected": dhan_conn.get("dhan_connected", False),
-        "dhan_source": dhan_conn.get("source", "TIER_3"),
-        "dhan_tier": dhan_conn.get("dhan_tier", 3),
-        "dhan_details": dhan_conn.get("details", "Operating normally"),
+        "market_status": "OPEN" if is_market_open() else "CLOSED",
         "angel_connected": angel_conn,
-        "angel_configured": angel_conn,
+        "angel_configured": angel.is_configured(),
+        "angel_status": angel_status,
+        "angel_feed_source": feed_source,
+        "feed_source": feed_source,
+        "active_index": sel_sym,
         "selected_index": sel_sym,
         "symbol": sel_sym,
         "nifty_spot": nifty_spot,
@@ -531,7 +548,7 @@ async def get_system_status(
         "countdown_timer": countdown_tmr,
         "database_ok": database_ok,
         "market_open": is_market_open(),
-        "message": "NiftyDebateAI operational — Dhan Market Data Active",
+        "message": "NiftyDebateAI operational — Angel One SmartAPI Active",
     }
 
 
@@ -542,6 +559,7 @@ async def run_debate_endpoint(
     payload: Optional[DebateRunRequest] = Body(None),
     symbol: Optional[str] = Query(None),
     session: AsyncSession = Depends(get_session),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
 ) -> dict[str, Any]:
     """Trigger an on-demand debate session (Bull -> Bear -> Judge) and return verdict."""
     idx_symbol = "NIFTY"
@@ -570,6 +588,30 @@ async def run_debate_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Debate failed to produce results",
         )
+
+    # Link debate session and trades to current_user if authenticated
+    if debate_result.id and current_user:
+        try:
+            target_user_id = None
+            if getattr(current_user, "id", None) is not None:
+                user_exists_stmt = select(UserModel.id).where(UserModel.id == current_user.id)
+                existing_user_id = (await session.execute(user_exists_stmt)).scalars().first()
+                if existing_user_id is not None:
+                    target_user_id = existing_user_id
+
+            if target_user_id is not None:
+                sess_stmt = select(DebateSessionModel).where(DebateSessionModel.id == debate_result.id)
+                sess_row = (await session.execute(sess_stmt)).scalars().first()
+                if sess_row:
+                    sess_row.user_id = target_user_id
+
+                trade_stmt = select(PaperTradeModel).where(PaperTradeModel.debate_id == debate_result.id)
+                trade_rows = (await session.execute(trade_stmt)).scalars().all()
+                for t in trade_rows:
+                    t.user_id = target_user_id
+                await session.commit()
+        except Exception as exc:
+            logger.warning("Could not associate user_id with debate run: %s", exc)
 
     # Query latest trade associated with this debate
     trade_info = None
@@ -700,12 +742,14 @@ async def get_active_trades(session: AsyncSession = Depends(get_session)) -> lis
         return []
 
     from market_data import calculate_option_premium, parse_option_symbol
-    from dhan_client import get_dhan_client
-    dhan = get_dhan_client()
+    from angel_client import get_angel_client
+    angel = get_angel_client()
 
+    n_spot = await angel.get_ltp("NIFTY") or 24986.40
+    b_spot = await angel.get_ltp("BANKNIFTY") or 58850.65
     spots = {
-        "NIFTY": dhan.get_ltp_sync("NIFTY"),
-        "BANKNIFTY": dhan.get_ltp_sync("BANKNIFTY"),
+        "NIFTY": n_spot,
+        "BANKNIFTY": b_spot,
     }
 
     result = []
@@ -769,6 +813,23 @@ async def get_trades_summary(session: AsyncSession = Depends(get_session)) -> di
     }
 
 
+_close_locks: dict[int, asyncio.Lock] = {}
+
+
+def _get_close_lock(trade_id: int) -> asyncio.Lock:
+    """Return an asyncio.Lock bound to the current running event loop for a given trade ID."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    lock = _close_locks.get(trade_id)
+    bound_loop = getattr(lock, "_loop", None)
+    if lock is None or (bound_loop is not None and loop is not None and bound_loop is not loop):
+        lock = asyncio.Lock()
+        _close_locks[trade_id] = lock
+    return lock
+
+
 @app.patch("/api/trades/{id}/close")
 @app.post("/api/trades/{id}/close")
 async def close_trade(
@@ -777,13 +838,15 @@ async def close_trade(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Close an active paper trade and compute realized P&L."""
-    stmt = select(PaperTradeModel).where(PaperTradeModel.id == id)
-    trade = (await session.execute(stmt)).scalars().first()
-    if not trade:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Trade {id} not found")
+    lock = _get_close_lock(id)
+    async with lock:
+        stmt = select(PaperTradeModel).where(PaperTradeModel.id == id)
+        trade = (await session.execute(stmt)).scalars().first()
+        if not trade:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Trade {id} not found")
 
-    if trade.status != "OPEN" and trade.exit_price is not None:
-        return format_trade_dict(trade)
+        if trade.status != "OPEN" and trade.exit_price is not None:
+            return format_trade_dict(trade)
 
     exit_price = (
         body.exit_price
@@ -826,6 +889,7 @@ async def close_trade(
 async def place_manual_trade(
     req: ManualTradeRequest,
     session: AsyncSession = Depends(get_session),
+    current_user: Optional[UserModel] = Depends(get_optional_user),
 ) -> dict[str, Any]:
     """Place a manual paper trade with Angel One style lot and total amount tracking."""
     from market_data import build_market_snapshot, calculate_option_premium, get_nearest_expiry
@@ -883,8 +947,16 @@ async def place_manual_trade(
     latest_stmt = select(DebateSessionModel).order_by(desc(DebateSessionModel.id)).limit(1)
     latest_sess = (await session.execute(latest_stmt)).scalars().first()
 
+    target_user_id = None
+    if current_user and getattr(current_user, "id", None) is not None:
+        user_exists_stmt = select(UserModel.id).where(UserModel.id == current_user.id)
+        existing_user_id = (await session.execute(user_exists_stmt)).scalars().first()
+        if existing_user_id is not None:
+            target_user_id = existing_user_id
+
     if latest_sess is None:
         audit_sess = DebateSessionModel(
+            user_id=target_user_id,
             spot_price=spot,
             index_symbol=idx_symbol,
             judge_decision=trade_type,
@@ -898,6 +970,7 @@ async def place_manual_trade(
         debate_id = latest_sess.id
 
     trade = PaperTradeModel(
+        user_id=target_user_id,
         debate_id=debate_id,
         index_symbol=idx_symbol,
         option_symbol=symbol,

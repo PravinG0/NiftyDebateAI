@@ -37,12 +37,14 @@ export default function BearCard({ data, onSelectTrade, lotSize = 25, indexSymbo
   return (
     <div
       className={`
-        bg-slate-900 border ${highConfidence ? 'border-rose-500' : 'border-slate-800'}
-        rounded-2xl overflow-hidden shadow-lg transition-all
+        bg-[#0D131F]/90 backdrop-blur-md border ${
+          highConfidence ? 'border-rose-500/80 shadow-bear-glow' : 'border-slate-800/80'
+        }
+        rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:border-rose-500/40
       `}
     >
       {/* Solid red accent bar */}
-      <div className="h-1.5 bg-rose-500" />
+      <div className="h-1.5 bg-gradient-to-r from-rose-500 to-pink-500" />
 
       <div className="p-5 space-y-4">
         {/* Header */}

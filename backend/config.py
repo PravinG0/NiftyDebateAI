@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     ANGEL_PIN: str = Field(default="")
     ANGEL_TOTP_SECRET: str = Field(default="")
 
+    # ── JWT Authentication ────────────────────────────────────────────────
+    JWT_SECRET_KEY: str = Field(default="niftydebate_secret_jwt_key_super_secure_99182")
+    JWT_ALGORITHM: str = Field(default="HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60 * 24 * 7)  # 7 days expiration
+
     # ── Safety / Sandbox Paper Trading ────────────────────────────────────
     FORCE_ANALYZER_MODE: bool = Field(default=True)
     LOT_SIZE: int = Field(default=25)
@@ -71,6 +76,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+JWT_SECRET_KEY: str = settings.JWT_SECRET_KEY
+JWT_ALGORITHM: str = settings.JWT_ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES: int = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 # ── Capital Investment Budget & Position Sizing Guardrails (R4) ───────────────

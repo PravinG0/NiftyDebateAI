@@ -90,9 +90,9 @@ export default function JudgeCard({ data, onSelectTrade, lotSize = 25, indexSymb
   const rewardInr = entryNum > 0 && targetNum > 0 ? Math.round((targetNum - entryNum) * lotSize) : null;
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg transition-all">
+    <div className="bg-[#0D131F]/90 backdrop-blur-md border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl transition-all duration-300 hover:border-amber-500/40">
       {/* Solid amber accent bar */}
-      <div className="h-1.5 bg-amber-500" />
+      <div className="h-1.5 bg-gradient-to-r from-amber-500 to-yellow-400" />
 
       <div className="p-4 sm:p-5 space-y-3 sm:space-y-4">
         {/* Header */}

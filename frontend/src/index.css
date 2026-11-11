@@ -3,12 +3,46 @@
 @tailwind utilities;
 
 :root {
-  --bg-primary: #020617;
+  --bg-primary: #080C14;
+  --bg-card: #0D131F;
+  --border-card: rgba(30, 41, 59, 0.7);
 }
 
 body {
   background-color: var(--bg-primary);
+  color: #F1F5F9;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Glass Card Component Utilities */
+.glass-panel {
+  background: rgba(13, 19, 31, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+.glass-card {
+  background: rgba(13, 19, 31, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(51, 65, 85, 0.4);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.glass-card-elevated {
+  background: rgba(20, 28, 46, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5);
+}
+
+/* Tabular Financial Numbers */
+.num-tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 /* Custom Scrollbar */
@@ -18,17 +52,17 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(8, 12, 20, 0.8);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.4);
+  background: rgba(71, 85, 105, 0.5);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.6);
+  background: rgba(100, 116, 139, 0.8);
 }
 
 /* Card Appear Animation */
@@ -60,28 +94,28 @@ body {
 /* Pulsing Glow */
 @keyframes pulseGlow {
   0%, 100% {
-    box-shadow: 0 0 8px rgba(52, 211, 153, 0.2);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
   }
   50% {
-    box-shadow: 0 0 20px rgba(52, 211, 153, 0.4);
+    box-shadow: 0 0 24px rgba(16, 185, 129, 0.5);
   }
 }
 
 @keyframes pulseGlowRed {
   0%, 100% {
-    box-shadow: 0 0 8px rgba(239, 68, 68, 0.2);
+    box-shadow: 0 0 8px rgba(244, 63, 94, 0.25);
   }
   50% {
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+    box-shadow: 0 0 24px rgba(244, 63, 94, 0.5);
   }
 }
 
 @keyframes pulseGlowAmber {
   0%, 100% {
-    box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.25);
   }
   50% {
-    box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+    box-shadow: 0 0 24px rgba(245, 158, 11, 0.5);
   }
 }
 
@@ -160,3 +194,4 @@ body {
 .animate-slide-up {
   animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+

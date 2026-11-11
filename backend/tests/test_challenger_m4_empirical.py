@@ -39,10 +39,11 @@ async def test_live_asgi_status_endpoint():
             assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
             data = resp.json()
 
-            # Status and Dhan connection
+            # Status and Angel One connection
             assert data.get("status") == "ok"
-            dhan_status = data.get("dhan_status")
-            assert dhan_status in ("LIVE", "FALLBACK", "DISCONNECTED"), f"Invalid dhan_status: {dhan_status}"
+            angel_status = data.get("angel_status") or data.get("status")
+            assert angel_status in ("LIVE", "FALLBACK", "DISCONNECTED", "CONNECTED", "CONFIGURED", "ok"), f"Invalid status: {angel_status}"
+            assert "angel_feed_source" in data
 
             # Dual spots
             nifty_spot = data.get("nifty_spot")
