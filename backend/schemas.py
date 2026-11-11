@@ -51,6 +51,21 @@ class MarketSnapshot(BaseModel):
     nifty_low: float | None = Field(default=None, description="Day low")
     nifty_open: float | None = Field(default=None, description="Day open")
 
+    # ── Advanced Institutional & Macro Metrics ──────────────────────────────
+    max_pain: int | None = Field(default=None, description="Max Pain strike level")
+    call_oi_wall: int | None = Field(default=None, description="Strike with highest Call OI (Key Resistance)")
+    put_oi_wall: int | None = Field(default=None, description="Strike with highest Put OI (Key Support)")
+    cpr_pivot: float | None = Field(default=None, description="Central Pivot Range (CPR) Pivot")
+    cpr_bc: float | None = Field(default=None, description="CPR Bottom Central level")
+    cpr_tc: float | None = Field(default=None, description="CPR Top Central level")
+    cpr_width_type: str | None = Field(default="NARROW_TRENDING", description="NARROW_TRENDING / WIDE_RANGEBOUND")
+    supertrend_direction: str | None = Field(default="BULLISH", description="Supertrend direction: BULLISH / BEARISH")
+    supertrend_value: float | None = Field(default=None, description="Supertrend trailing stop level")
+    advance_decline_ratio: float | None = Field(default=1.2, description="Market breadth ratio (advances / declines)")
+    heavyweights_alignment: str | None = Field(default="BULLISH", description="Top heavyweights trend alignment")
+    fii_sentiment: str | None = Field(default="NEUTRAL", description="FII institutional sentiment: NET_BUYER / NET_SELLER / NEUTRAL")
+    global_sentiment: str | None = Field(default="POSITIVE", description="Global cues sentiment: POSITIVE / NEGATIVE / NEUTRAL")
+
     @field_validator("timestamp", mode="after")
     @classmethod
     def normalize_snapshot_timestamp(cls, v: datetime) -> datetime:

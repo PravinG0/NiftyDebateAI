@@ -48,6 +48,7 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
+.agents/
 *~
 .DS_Store
 Thumbs.db

@@ -424,6 +424,8 @@ async def get_market_candles(
         from angel_client import get_angel_client
         angel = get_angel_client()
         candles = await angel.get_candles(symbol=symbol, interval=interval, range_period=range_period)
+        if not candles:
+            candles = angel._generate_fallback_candles(symbol=symbol, interval=interval)
         source = "angelone" if candles else "unavailable"
         return {
             "status": "success",

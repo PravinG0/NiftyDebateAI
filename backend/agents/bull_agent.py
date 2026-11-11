@@ -55,7 +55,17 @@ You must debate and analyse across ALL possible technical, structural, and deriv
    - High positive delta on ATM CE capturing sharp index moves.
    - Favorable risk:reward against intraday theta decay.
 
-7. **Multi-Timeframe Trend Confluence**:
+7. **Central Pivot Range (CPR) & Supertrend Strategy**:
+   - CPR Pivot, BC, TC levels: Spot holding above CPR Top Central (TC) confirms institutional bullish accumulation.
+   - CPR Width: "NARROW_TRENDING" signals imminent high-probability trending expansion day; "WIDE_RANGEBOUND" signals support bounce.
+   - Supertrend (10, 3): Confluence when Supertrend is BULLISH and providing a tight trailing stop floor.
+
+8. **Institutional OI Walls, Max Pain & Market Breadth**:
+   - Put OI Wall strike acts as a rock-solid institutional support floor.
+   - Max Pain strike pull: Upward gravity if spot is below or near Max Pain.
+   - Heavyweights & Breadth: Positive Advance/Decline ratio and Reliance/HDFC Bank alignment confirming market-wide participation.
+
+9. **Multi-Timeframe Trend Confluence**:
    - Alignment between 5-min execution chart and 15-min/hourly higher timeframe trend.
 
 ## Output requirements
@@ -161,6 +171,13 @@ class BullAgent:
             f"CE OI Chg  : {snapshot.ce_oi_change}\n"
             f"PE OI Chg  : {snapshot.pe_oi_change}\n"
             f"HTF Trend  : {snapshot.higher_tf_trend}\n"
+            f"CPR Pivot  : {snapshot.cpr_pivot} (BC: {snapshot.cpr_bc}, TC: {snapshot.cpr_tc}, Regime: {snapshot.cpr_width_type})\n"
+            f"Supertrend : {snapshot.supertrend_direction} (Level: {snapshot.supertrend_value})\n"
+            f"Max Pain   : {snapshot.max_pain}\n"
+            f"Put OI Wall: {snapshot.put_oi_wall} (Institutional Support)\n"
+            f"Call OI Wall: {snapshot.call_oi_wall} (Institutional Resistance)\n"
+            f"Breadth    : A/D Ratio {snapshot.advance_decline_ratio}, Heavyweights: {snapshot.heavyweights_alignment}\n"
+            f"Institutions: FII {snapshot.fii_sentiment}, Global {snapshot.global_sentiment}\n"
             f"Timestamp  : {snapshot.timestamp.isoformat()}\n"
         )
 

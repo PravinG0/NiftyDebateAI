@@ -56,6 +56,44 @@ export default function OptionChainBoard({
     ? Math.round(spotPrice / strikeStep) * strikeStep
     : null;
 
+  // Institutional Derivatives Calculations: Max Pain, Call Wall & Put Wall
+  let callWall = null;
+  let putWall = null;
+  let maxPain = null;
+  if (chain && chain.length > 0) {
+    let maxCeOi = -1;
+    let maxPeOi = -1;
+    chain.forEach((row) => {
+      const ceOi = Number(row.ce?.oi || 0);
+      const peOi = Number(row.pe?.oi || 0);
+      if (ceOi > maxCeOi) {
+        maxCeOi = ceOi;
+        callWall = row.strike;
+      }
+      if (peOi > maxPeOi) {
+        maxPeOi = peOi;
+        putWall = row.strike;
+      }
+    });
+
+    let minLoss = Infinity;
+    chain.forEach((candidateRow) => {
+      const candStrike = candidateRow.strike;
+      let totalPayout = 0;
+      chain.forEach((r) => {
+        const k = r.strike;
+        const cOi = Number(r.ce?.oi || 0);
+        const pOi = Number(r.pe?.oi || 0);
+        if (candStrike > k) totalPayout += (candStrike - k) * cOi;
+        else if (candStrike < k) totalPayout += (k - candStrike) * pOi;
+      });
+      if (totalPayout < minLoss) {
+        minLoss = totalPayout;
+        maxPain = candStrike;
+      }
+    });
+  }
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
       {/* Top Header Bar */}
@@ -126,6 +164,38 @@ export default function OptionChainBoard({
         </div>
       </div>
 
+      {/* Institutional Key Levels Sub-Bar */}
+      {chain.length > 0 && (
+        <div className="px-3 sm:px-5 py-2 bg-[#080C14] border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-1.5 font-mono">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Max Pain:</span>
+              <span className="px-2 py-0.5 rounded bg-purple-950/60 border border-purple-800/60 text-purple-300 font-bold">
+                {maxPain || '—'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 font-mono">
+              <span className="text-[10px] uppercase font-bold text-rose-400">Call Wall (Res):</span>
+              <span className="px-2 py-0.5 rounded bg-rose-950/60 border border-rose-800/60 text-rose-300 font-bold">
+                {callWall ? `${callWall} CE` : '—'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 font-mono">
+              <span className="text-[10px] uppercase font-bold text-emerald-400">Put Wall (Sup):</span>
+              <span className="px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 font-bold">
+                {putWall ? `${putWall} PE` : '—'}
+              </span>
+            </div>
+          </div>
+
+          <div className="text-[10px] text-slate-400 font-mono hidden md:block">
+            Institutional Open Interest Resistance & Support Boundaries
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="p-3 mx-3 sm:mx-4 my-2.5 text-xs bg-rose-950 border border-rose-800 rounded-lg text-rose-200">
           {error}
@@ -165,6 +235,21 @@ export default function OptionChainBoard({
                     {isAtm && (
                       <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-600 text-white font-sans animate-pulse">
                         ATM
+                      </span>
+                    )}
+                    {strike === callWall && (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-950 text-rose-300 border border-rose-800 font-sans">
+                        Call Wall
+                      </span>
+                    )}
+                    {strike === putWall && (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 font-sans">
+                        Put Wall
+                      </span>
+                    )}
+                    {strike === maxPain && (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-950 text-purple-300 border border-purple-800 font-sans">
+                        Max Pain
                       </span>
                     )}
                   </div>
@@ -356,13 +441,32 @@ export default function OptionChainBoard({
                           : 'bg-slate-900/90 text-slate-100'
                       }`}
                     >
-                      <div className="flex items-center justify-center gap-1">
-                        <span>{strike}</span>
-                        {isAtm && (
-                          <span className="px-1.5 py-0.2 rounded text-[9px] bg-black/40 text-blue-200 font-sans uppercase">
-                            ATM
-                          </span>
-                        )}
+                      <div className="flex flex-col items-center justify-center gap-0.5">
+                        <div className="flex items-center justify-center gap-1">
+                          <span>{strike}</span>
+                          {isAtm && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] bg-black/40 text-blue-200 font-sans uppercase">
+                              ATM
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {strike === callWall && (
+                            <span className="px-1 py-0.2 rounded text-[8px] font-sans font-bold bg-rose-950 text-rose-300 border border-rose-800">
+                              Call Wall
+                            </span>
+                          )}
+                          {strike === putWall && (
+                            <span className="px-1 py-0.2 rounded text-[8px] font-sans font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                              Put Wall
+                            </span>
+                          )}
+                          {strike === maxPain && (
+                            <span className="px-1 py-0.2 rounded text-[8px] font-sans font-bold bg-purple-950 text-purple-300 border border-purple-800">
+                              Max Pain
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
 

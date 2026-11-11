@@ -3,6 +3,7 @@ import BullCard from './BullCard';
 import BearCard from './BearCard';
 import JudgeCard from './JudgeCard';
 import SentimentMeter from './SentimentMeter';
+import InstitutionalMatrix from './InstitutionalMatrix';
 import DebateVoting from './DebateVoting';
 import DebateStepper from './DebateStepper';
 import { Brain, Clock, Bookmark, BookmarkCheck, Share2 } from 'lucide-react';
@@ -79,6 +80,7 @@ export default function DebateArena({
   const bearData = debate?.bear || debate?.bear_analysis || {};
   const judgeData = debate?.judge || debate?.judge_verdict || debate?.verdict || {};
   const spotPrice = debate?.spot_price || debate?.nifty_spot;
+  const snapshotData = debate?.market_snapshot || debate?.market_data || debate?.snapshot || null;
   const timestamp = debate?.timestamp_ist || debate?.timestamp || debate?.created_at;
   const indexSymbol = debate?.index_symbol || debate?.symbol || selectedIndex || 'NIFTY';
   const lotSize = indexSymbol === 'BANKNIFTY' ? 15 : 25;
@@ -165,6 +167,14 @@ export default function DebateArena({
             bullScore={bullConfidence}
             bearScore={bearConfidence}
           />
+
+          {/* Institutional Market Matrix & Key Levels */}
+          {snapshotData && (
+            <InstitutionalMatrix
+              snapshot={snapshotData}
+              selectedIndex={indexSymbol}
+            />
+          )}
 
           {/* Three-Column Debate Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

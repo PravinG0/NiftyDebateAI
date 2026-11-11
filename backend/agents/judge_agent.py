@@ -43,8 +43,12 @@ You are presented with:
 2. **VIX / IV risk**: VIX > 20 means elevated premiums; buying options is risky
    due to potential IV crush, even if direction is correct.
 3. **Confidence threshold**: Only consider a side if confidence >= 8.
-4. **Multi-timeframe alignment**: The higher_tf_trend must agree with the
-   proposed direction.
+4. **Multi-indicator & CPR/Supertrend Confluence**:
+   - The higher_tf_trend must agree with the proposed direction.
+   - CPR regime: "NARROW_TRENDING" indicates strong breakout momentum; "WIDE_RANGEBOUND" demands extreme caution against choppy false breakouts.
+   - Supertrend: Spot position relative to Supertrend line confirms directional bias.
+   - OI Walls & Max Pain: For BUY_CE, spot must not be blocked right below Call OI Wall resistance; for BUY_PE, spot must not be blocked right above Put OI Wall support.
+   - Market Breadth & Heavyweights: Weight of Reliance, HDFC Bank, ICICI Bank, and Infosys alignment reinforces conviction.
 5. **Risk management & Strict Capital Guardrails (MANDATORY)**:
    - Maximum Stop-Loss risk: MUST NOT EXCEED ₹700 (INR) total loss per 1-lot trade.
      * For Nifty 50 (lot 25): (Entry - Stop-Loss) <= 28.00 points.
@@ -188,7 +192,14 @@ class JudgeAgent:
             f"PCR        : {snapshot.pcr}\n"
             f"CE OI Chg  : {snapshot.ce_oi_change}\n"
             f"PE OI Chg  : {snapshot.pe_oi_change}\n"
-            f"HTF Trend  : {snapshot.higher_tf_trend}\n\n"
+            f"HTF Trend  : {snapshot.higher_tf_trend}\n"
+            f"CPR Pivot  : {snapshot.cpr_pivot} (BC: {snapshot.cpr_bc}, TC: {snapshot.cpr_tc}, Regime: {snapshot.cpr_width_type})\n"
+            f"Supertrend : {snapshot.supertrend_direction} (Level: {snapshot.supertrend_value})\n"
+            f"Max Pain   : {snapshot.max_pain}\n"
+            f"Put OI Wall: {snapshot.put_oi_wall} (Major Support)\n"
+            f"Call OI Wall: {snapshot.call_oi_wall} (Major Resistance)\n"
+            f"Breadth    : A/D Ratio {snapshot.advance_decline_ratio}, Heavyweights: {snapshot.heavyweights_alignment}\n"
+            f"Institutions: FII {snapshot.fii_sentiment}, Global {snapshot.global_sentiment}\n\n"
             "## LIVE OPTION CHAIN PRICES (EXACT CONTRACT PREMIUMS)\n"
             f"Bull Contract ({bull.recommended_strike}): Live LTP = ₹{bull_ltp:.2f} (1 Lot = ₹{bull_ltp*25:.2f})\n"
             f"Bear Contract ({bear.recommended_strike}): Live LTP = ₹{bear_ltp:.2f} (1 Lot = ₹{bear_ltp*25:.2f})\n\n"

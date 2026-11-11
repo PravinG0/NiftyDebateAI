@@ -55,7 +55,17 @@ You must debate and analyse across ALL possible technical, structural, and deriv
    - Negative delta alignment capturing downward slides with gamma expansion on breakdowns.
    - Favorable risk:reward vs theta decay if downside velocity is expected.
 
-7. **Multi-Timeframe Trend Confluence**:
+7. **Central Pivot Range (CPR) & Supertrend Strategy**:
+   - CPR Pivot, BC, TC levels: Spot rejected at CPR Bottom Central (BC) or trading below TC/Pivot confirms institutional distribution.
+   - CPR Width: "NARROW_TRENDING" signals imminent high-probability trending breakdown day; "WIDE_RANGEBOUND" signals rejection at resistance.
+   - Supertrend (10, 3): Bearish confirmation when Supertrend direction is BEARISH and acting as a descending ceiling.
+
+8. **Institutional OI Walls, Max Pain & Market Breadth**:
+   - Call OI Wall strike acts as an insurmountable institutional resistance ceiling.
+   - Max Pain downward drag if spot is overextended above Max Pain.
+   - Heavyweights & Breadth: Negative Advance/Decline ratio and Reliance/HDFC Bank weakness confirming broad-based institutional selling.
+
+9. **Multi-Timeframe Trend Confluence**:
    - Alignment between 5-min execution chart and 15-min/hourly higher timeframe bearish trend.
 
 ## Output requirements
@@ -161,6 +171,13 @@ class BearAgent:
             f"CE OI Chg  : {snapshot.ce_oi_change}\n"
             f"PE OI Chg  : {snapshot.pe_oi_change}\n"
             f"HTF Trend  : {snapshot.higher_tf_trend}\n"
+            f"CPR Pivot  : {snapshot.cpr_pivot} (BC: {snapshot.cpr_bc}, TC: {snapshot.cpr_tc}, Regime: {snapshot.cpr_width_type})\n"
+            f"Supertrend : {snapshot.supertrend_direction} (Level: {snapshot.supertrend_value})\n"
+            f"Max Pain   : {snapshot.max_pain}\n"
+            f"Put OI Wall: {snapshot.put_oi_wall} (Institutional Support)\n"
+            f"Call OI Wall: {snapshot.call_oi_wall} (Institutional Resistance)\n"
+            f"Breadth    : A/D Ratio {snapshot.advance_decline_ratio}, Heavyweights: {snapshot.heavyweights_alignment}\n"
+            f"Institutions: FII {snapshot.fii_sentiment}, Global {snapshot.global_sentiment}\n"
             f"Timestamp  : {snapshot.timestamp.isoformat()}\n"
         )
 

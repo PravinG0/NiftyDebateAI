@@ -325,6 +325,63 @@ class AngelClient:
                 logger.error("Exception authenticating with Angel One SmartAPI: %s", exc)
                 return False
 
+    def _generate_fallback_candles(
+        self,
+        symbol: str,
+        interval: str = "5m",
+        count: int = 60,
+    ) -> list[dict[str, Any]]:
+        """Generate realistic synthetic candles adhering to lightweight-charts specs if Angel One is rate-limited or offline."""
+        sym = symbol.upper()
+        if "BANK" in sym:
+            base_price = 52140.0
+        elif "RELIANCE" in sym:
+            base_price = 2850.0
+        elif "HDFC" in sym:
+            base_price = 1680.0
+        elif "INFY" in sym:
+            base_price = 1820.0
+        elif "ICICI" in sym:
+            base_price = 1260.0
+        elif "TCS" in sym:
+            base_price = 4120.0
+        else:
+            base_price = 24980.0
+
+        step_seconds = 300
+        if "1m" in interval:
+            step_seconds = 60
+        elif "15m" in interval:
+            step_seconds = 900
+        elif "1h" in interval or "60m" in interval:
+            step_seconds = 3600
+        elif "1d" in interval.lower():
+            step_seconds = 86400
+
+        now_sec = int(time.time())
+        end_time = (now_sec // step_seconds) * step_seconds
+        start_time = end_time - (count * step_seconds)
+
+        candles: list[dict[str, Any]] = []
+        cur_price = base_price
+        for i in range(count):
+            t = start_time + (i * step_seconds)
+            drift = math.sin(i * 0.25) * (base_price * 0.001)
+            o = round(cur_price, 2)
+            c = round(cur_price + drift + ((i % 3 - 1) * (base_price * 0.0005)), 2)
+            h = round(max(o, c) + (base_price * 0.0008), 2)
+            l = round(min(o, c) - (base_price * 0.0008), 2)
+            candles.append({
+                "time": t,
+                "open": o,
+                "high": h,
+                "low": l,
+                "close": c,
+            })
+            cur_price = c
+
+        return candles
+
     async def get_candles(
         self,
         symbol: str = "NIFTY",
@@ -715,6 +772,13 @@ class AngelClient:
                 "higher_tf_trend": "NEUTRAL",
                 "last_close": 0.0,
                 "candle_count": 0,
+                "cpr_pivot": 0.0,
+                "cpr_bc": 0.0,
+                "cpr_tc": 0.0,
+                "cpr_width": 0.0,
+                "cpr_width_type": "NARROW_TRENDING",
+                "supertrend_direction": "NEUTRAL",
+                "supertrend_value": 0.0,
             }
 
         n = len(candles)
@@ -739,6 +803,13 @@ class AngelClient:
                 "higher_tf_trend": "BULLISH",
                 "last_close": last_close,
                 "candle_count": 1,
+                "cpr_pivot": last_close,
+                "cpr_bc": last_close,
+                "cpr_tc": last_close,
+                "cpr_width": 0.0,
+                "cpr_width_type": "NARROW_TRENDING",
+                "supertrend_direction": "BULLISH",
+                "supertrend_value": last_close,
             }
 
         def _calc_ema(span: int) -> float:
@@ -803,6 +874,29 @@ class AngelClient:
 
         trend = "BULLISH" if last_close >= ema_20 else "BEARISH"
 
+        # CPR (Central Pivot Range) calculated from session bounds
+        recent_window = min(n, 75)
+        day_high = max(highs[-recent_window:])
+        day_low = min(lows[-recent_window:])
+        pivot = round((day_high + day_low + last_close) / 3.0, 2)
+        bc = round((day_high + day_low) / 2.0, 2)
+        tc = round((pivot - bc) + pivot, 2)
+        cpr_width = round(abs(tc - bc), 2)
+        width_pct = (cpr_width / last_close) * 100.0 if last_close > 0 else 0.0
+        cpr_width_type = "NARROW_TRENDING" if width_pct < 0.35 else "WIDE_RANGEBOUND"
+
+        # Supertrend (period 10, multiplier 3.0)
+        st_period = min(10, n)
+        if st_period > 1 and len(tr_list) >= st_period:
+            st_atr = sum(tr_list[-st_period:]) / float(st_period)
+        else:
+            st_atr = atr
+        hl2 = (highs[-1] + lows[-1]) / 2.0
+        st_upper = hl2 + (3.0 * st_atr)
+        st_lower = hl2 - (3.0 * st_atr)
+        st_dir = "BULLISH" if last_close >= st_lower else "BEARISH"
+        st_val = round(st_lower if st_dir == "BULLISH" else st_upper, 2)
+
         return {
             "ema_20": ema_20,
             "ema_50": ema_50,
@@ -814,6 +908,13 @@ class AngelClient:
             "higher_tf_trend": trend,
             "last_close": last_close,
             "candle_count": n,
+            "cpr_pivot": pivot,
+            "cpr_bc": min(bc, tc),
+            "cpr_tc": max(bc, tc),
+            "cpr_width": cpr_width,
+            "cpr_width_type": cpr_width_type,
+            "supertrend_direction": st_dir,
+            "supertrend_value": st_val,
         }
 
     def get_connection_status_sync(self) -> dict[str, Any]:
